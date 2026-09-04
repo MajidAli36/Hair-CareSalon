@@ -522,7 +522,7 @@ export function renderSaleReceiptHtml(data: SaleReceiptInput): string {
 
   const body = `
     ${businessHeader(data.business)}
-    <div class="doc-type"><span class="doc-type-label">Tax Invoice</span></div>
+    <div class="doc-type"><span class="doc-type-label">Invoice</span></div>
     <div class="meta">
       ${metaRow("Invoice No.", data.invoiceNumber, true)}
       ${metaRow("Date", data.date, true)}

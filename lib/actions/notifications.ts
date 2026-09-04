@@ -3,7 +3,26 @@
 import { requireOrganization } from "@/lib/auth/organization";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency, formatCustomerName, formatDateTime } from "@/lib/format";
-import { isoToLocalDateString } from "@/lib/dates/local";
+import { getLocalDateString, isoToLocalDateString } from "@/lib/dates/local";
+
+function safeVisitDay(iso: string | null | undefined): string {
+  if (!iso) return getLocalDateString();
+  try {
+    const day = isoToLocalDateString(iso);
+    return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : getLocalDateString();
+  } catch {
+    return getLocalDateString();
+  }
+}
+
+function safeVisitMeta(iso: string | null | undefined): string {
+  if (!iso) return "Visit time unavailable";
+  try {
+    return `Visit ${formatDateTime(iso)}`;
+  } catch {
+    return "Visit time unavailable";
+  }
+}
 
 export type AppNotification = {
   id: string;
@@ -132,14 +151,14 @@ export async function getAppNotifications(): Promise<AppNotificationsPayload> {
     const phone = customer?.phone ? ` · ${customer.phone}` : "";
     const stylist = staff?.full_name ? ` with ${staff.full_name}` : "";
 
-    const visitDay = isoToLocalDateString(appt.scheduled_at);
+    const visitDay = safeVisitDay(appt.scheduled_at);
 
     pendingItems.push({
       id: `deposit-${row.id}`,
       kind: "pending_payment",
       title: "Payment proof waiting",
       body: `${customerName}${phone} sent ${formatCurrency(Number(row.amount))}${stylist}`,
-      meta: `Visit ${formatDateTime(appt.scheduled_at)}`,
+      meta: safeVisitMeta(appt.scheduled_at),
       href: `/online-booking?date=${visitDay}&focus=deposits`,
       createdAt: row.created_at,
       actionable: true,
@@ -161,14 +180,14 @@ export async function getAppNotifications(): Promise<AppNotificationsPayload> {
     const servicesLabel =
       serviceNames.length > 0 ? serviceNames.slice(0, 2).join(", ") : "Online booking";
     const stylist = staff?.full_name ? ` · ${staff.full_name}` : "";
-    const visitDay = isoToLocalDateString(row.scheduled_at);
+    const visitDay = safeVisitDay(row.scheduled_at);
 
     bookingItems.push({
       id: `booking-${row.id}`,
       kind: "online_booking",
       title: "New online booking",
       body: `${customerName} · ${servicesLabel}${stylist}`,
-      meta: `Visit ${formatDateTime(row.scheduled_at)}`,
+      meta: safeVisitMeta(row.scheduled_at),
       href: `/online-booking?date=${visitDay}`,
       createdAt: row.created_at,
       actionable: false,

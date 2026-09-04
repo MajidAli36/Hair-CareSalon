@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import {
   fetchOnlineAppointments,
   type OnlineAppointmentRow,
@@ -61,6 +60,7 @@ type OnlineBookingHubProps = {
 };
 
 function syncDateInUrl(date: string) {
+  if (typeof window === "undefined") return;
   const url = new URL(window.location.href);
   url.searchParams.set("date", date);
   window.history.replaceState(null, "", `${url.pathname}?${url.searchParams.toString()}`);
@@ -74,27 +74,19 @@ export function OnlineBookingHub({
   advanceSettings,
   initialPendingCount,
   publicUrl,
-  focus: initialFocus = null,
+  focus = null,
 }: OnlineBookingHubProps) {
-  const searchParams = useSearchParams();
-  const dateFromUrl = searchParams.get("date");
-  const focusFromUrl = searchParams.get("focus") === "deposits" ? "deposits" : null;
-  const focus = focusFromUrl ?? initialFocus;
-
-  const [date, setDate] = useState(dateFromUrl || initialDate);
+  const [date, setDate] = useState(initialDate);
   const [appointments, setAppointments] = useState(initialAppointments);
   const [staff, setStaff] = useState(initialStaff);
   const [pendingCount, setPendingCount] = useState(initialPendingCount);
   const [loadingAppointments, startAppointmentTransition] = useTransition();
   const appointmentsSectionRef = useRef<HTMLDivElement>(null);
-  const lastLoadedDateRef = useRef(dateFromUrl || initialDate);
 
   const loadAppointments = useCallback((targetDate: string) => {
-    lastLoadedDateRef.current = targetDate;
     startAppointmentTransition(async () => {
       try {
         const rows = await fetchOnlineAppointments(targetDate);
-        if (lastLoadedDateRef.current !== targetDate) return;
         setAppointments(rows);
       } catch {
         // Keep current list if fetch fails
@@ -102,33 +94,15 @@ export function OnlineBookingHub({
     });
   }, []);
 
-  // Notification / soft nav: URL ?date= changed while staying on this page
-  useEffect(() => {
-    const nextDate = dateFromUrl || initialDate;
-    if (!nextDate || nextDate === lastLoadedDateRef.current) return;
-    setDate(nextDate);
-    loadAppointments(nextDate);
-  }, [dateFromUrl, initialDate, loadAppointments]);
-
-  // Server props after router.refresh()
-  useEffect(() => {
-    setPendingCount(initialPendingCount);
-    if (!dateFromUrl || dateFromUrl === initialDate) {
-      setAppointments(initialAppointments);
-      setDate(initialDate);
-      lastLoadedDateRef.current = initialDate;
-    }
-  }, [initialDate, initialAppointments, initialPendingCount, dateFromUrl]);
-
   useEffect(() => {
     if (focus !== "deposits") return;
     const node = appointmentsSectionRef.current;
     if (!node) return;
     const timer = window.setTimeout(() => {
       node.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 80);
+    }, 120);
     return () => window.clearTimeout(timer);
-  }, [focus, date]);
+  }, [focus, initialDate]);
 
   function handleDateChange(newDate: string) {
     if (!newDate || newDate === date) return;
@@ -301,8 +275,8 @@ export function OnlineBookingHub({
               <CardHeader>
                 <CardTitle>Staff for online booking today</CardTitle>
                 <CardDescription>
-                  Stylists enabled for public booking on {DAY_NAMES[dayOfWeek]} ({todayKey}).
-                  Customers only see those with hours set.
+                  Stylists enabled for public booking on {DAY_NAMES[dayOfWeek] ?? "today"} (
+                  {todayKey}). Customers only see those with hours set.
                 </CardDescription>
               </CardHeader>
               <CardContent>

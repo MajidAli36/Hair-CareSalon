@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { Bell, CalendarClock, CircleDollarSign, Loader2 } from "lucide-react";
 import {
   getAppNotifications,
@@ -33,7 +32,6 @@ function relativeTime(iso: string): string {
 }
 
 export function NotificationBell() {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [payload, setPayload] = useState<AppNotificationsPayload>({
@@ -96,13 +94,14 @@ export function NotificationBell() {
     }
   }
 
-  /** Close menu first, then navigate — Link inside Menu.Item is blocked by Base UI. */
+  /**
+   * Full page navigation — soft router.push + refresh was racing and leaving
+   * users on the previous URL with an error boundary.
+   */
   function goTo(href: string) {
     setOpen(false);
-    window.setTimeout(() => {
-      router.push(href);
-      router.refresh();
-    }, 0);
+    const target = href.startsWith("/") ? href : `/${href}`;
+    window.location.assign(target);
   }
 
   return (
