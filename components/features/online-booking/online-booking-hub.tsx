@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   fetchOnlineAppointments,
   type OnlineAppointmentRow,
@@ -73,37 +74,61 @@ export function OnlineBookingHub({
   advanceSettings,
   initialPendingCount,
   publicUrl,
-  focus = null,
+  focus: initialFocus = null,
 }: OnlineBookingHubProps) {
-  const [date, setDate] = useState(initialDate);
+  const searchParams = useSearchParams();
+  const dateFromUrl = searchParams.get("date");
+  const focusFromUrl = searchParams.get("focus") === "deposits" ? "deposits" : null;
+  const focus = focusFromUrl ?? initialFocus;
+
+  const [date, setDate] = useState(dateFromUrl || initialDate);
   const [appointments, setAppointments] = useState(initialAppointments);
   const [staff, setStaff] = useState(initialStaff);
   const [pendingCount, setPendingCount] = useState(initialPendingCount);
   const [loadingAppointments, startAppointmentTransition] = useTransition();
   const appointmentsSectionRef = useRef<HTMLDivElement>(null);
+  const lastLoadedDateRef = useRef(dateFromUrl || initialDate);
 
-  // Keep in sync when navigating from notification links (same page, new ?date=)
+  const loadAppointments = useCallback((targetDate: string) => {
+    lastLoadedDateRef.current = targetDate;
+    startAppointmentTransition(async () => {
+      try {
+        const rows = await fetchOnlineAppointments(targetDate);
+        if (lastLoadedDateRef.current !== targetDate) return;
+        setAppointments(rows);
+      } catch {
+        // Keep current list if fetch fails
+      }
+    });
+  }, []);
+
+  // Notification / soft nav: URL ?date= changed while staying on this page
   useEffect(() => {
-    setDate(initialDate);
-    setAppointments(initialAppointments);
+    const nextDate = dateFromUrl || initialDate;
+    if (!nextDate || nextDate === lastLoadedDateRef.current) return;
+    setDate(nextDate);
+    loadAppointments(nextDate);
+  }, [dateFromUrl, initialDate, loadAppointments]);
+
+  // Server props after router.refresh()
+  useEffect(() => {
     setPendingCount(initialPendingCount);
-  }, [initialDate, initialAppointments, initialPendingCount]);
+    if (!dateFromUrl || dateFromUrl === initialDate) {
+      setAppointments(initialAppointments);
+      setDate(initialDate);
+      lastLoadedDateRef.current = initialDate;
+    }
+  }, [initialDate, initialAppointments, initialPendingCount, dateFromUrl]);
 
   useEffect(() => {
     if (focus !== "deposits") return;
     const node = appointmentsSectionRef.current;
     if (!node) return;
-    window.requestAnimationFrame(() => {
+    const timer = window.setTimeout(() => {
       node.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-  }, [focus, initialDate, appointments]);
-
-  const loadAppointments = useCallback((targetDate: string) => {
-    startAppointmentTransition(async () => {
-      const rows = await fetchOnlineAppointments(targetDate);
-      setAppointments(rows);
-    });
-  }, []);
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [focus, date]);
 
   function handleDateChange(newDate: string) {
     if (!newDate || newDate === date) return;

@@ -23,8 +23,8 @@ export default async function WhatsAppPage() {
         <CardHeader>
           <CardTitle>Send to customer</CardTitle>
           <CardDescription>
-            WhatsApp opens with the message already written. Review it, then click Send in
-            WhatsApp.
+            Opens WhatsApp with a full thank-you message already written. Review it, then click Send
+            in WhatsApp.
           </CardDescription>
         </CardHeader>
         <CardContent>

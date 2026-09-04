@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import {
   getAppointments,
   getBookingAdvanceSettings,
@@ -8,6 +9,7 @@ import { requireOrganization } from "@/lib/auth/organization";
 import { createClient } from "@/lib/supabase/server";
 import { OnlineBookingHub } from "@/components/features/online-booking/online-booking-hub";
 import { getLocalDateString } from "@/lib/dates/local";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type PageProps = {
   searchParams: Promise<{ date?: string; focus?: string }>;
@@ -36,15 +38,26 @@ export default async function OnlineBookingPage({ searchParams }: PageProps) {
   const publicUrl = `/book/${orgRow?.slug ?? "hair-salon"}`;
 
   return (
-    <OnlineBookingHub
-      initialDate={initialDate}
-      initialAppointments={appointments}
-      staff={staff}
-      schedules={schedules}
-      advanceSettings={advanceSettings}
-      initialPendingCount={pendingCount}
-      publicUrl={publicUrl}
-      focus={focus}
-    />
+    <Suspense
+      fallback={
+        <div className="space-y-4">
+          <Skeleton className="h-10 w-64" />
+          <Skeleton className="h-40 w-full" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      }
+    >
+      <OnlineBookingHub
+        key={`${initialDate}-${focus ?? "none"}`}
+        initialDate={initialDate}
+        initialAppointments={appointments}
+        staff={staff}
+        schedules={schedules}
+        advanceSettings={advanceSettings}
+        initialPendingCount={pendingCount}
+        publicUrl={publicUrl}
+        focus={focus}
+      />
+    </Suspense>
   );
 }

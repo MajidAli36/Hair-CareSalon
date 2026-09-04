@@ -3,18 +3,12 @@
 import { useMemo, useState } from "react";
 import type { WhatsAppCustomer } from "@/lib/actions/whatsapp";
 import { buildWhatsAppSendUrl } from "@/lib/whatsapp/links";
+import { buildCustomerThanksMessage } from "@/lib/whatsapp/thanks-message";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 
 function customerName(customer: WhatsAppCustomer) {
   return [customer.first_name, customer.last_name].filter(Boolean).join(" ");
-}
-
-function greeting(customer?: WhatsAppCustomer) {
-  const firstName = customer?.first_name?.trim();
-  return firstName
-    ? `Hi ${firstName}, this is Hair & Care Salon.`
-    : "Hi, this is Hair & Care Salon.";
 }
 
 export function SendWhatsAppForm({ customers }: { customers: WhatsAppCustomer[] }) {
@@ -25,13 +19,21 @@ export function SendWhatsAppForm({ customers }: { customers: WhatsAppCustomer[] 
   );
   const [error, setError] = useState<string | null>(null);
 
+  const message = useMemo(
+    () =>
+      buildCustomerThanksMessage({
+        firstName: selectedCustomer?.first_name,
+        fullName: selectedCustomer ? customerName(selectedCustomer) : null,
+      }),
+    [selectedCustomer]
+  );
+
   function selectCustomer(id: string) {
     setCustomerId(id);
     setError(null);
   }
 
   function openWhatsApp() {
-    const message = greeting(selectedCustomer);
     const url = selectedCustomer
       ? buildWhatsAppSendUrl(selectedCustomer.phone, message)
       : null;
@@ -81,13 +83,21 @@ export function SendWhatsAppForm({ customers }: { customers: WhatsAppCustomer[] 
         </p>
       </div>
 
+      <div className="space-y-2">
+        <Label>Message preview</Label>
+        <div className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-lg border bg-background p-4 text-sm leading-relaxed text-foreground">
+          {message}
+        </div>
+      </div>
+
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       <Button type="button" onClick={openWhatsApp}>
         Send WhatsApp
       </Button>
       <p className="text-xs text-muted-foreground">
-        WhatsApp will open with this message filled in. Click Send there to deliver it.
+        WhatsApp will open with this full thank-you message filled in. Click Send there to deliver
+        it.
       </p>
     </div>
   );

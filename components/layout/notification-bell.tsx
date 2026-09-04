@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, useTransition } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Bell, CalendarClock, CircleDollarSign, Loader2 } from "lucide-react";
 import {
   getAppNotifications,
@@ -33,6 +33,7 @@ function relativeTime(iso: string): string {
 }
 
 export function NotificationBell() {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [payload, setPayload] = useState<AppNotificationsPayload>({
@@ -95,6 +96,15 @@ export function NotificationBell() {
     }
   }
 
+  /** Close menu first, then navigate — Link inside Menu.Item is blocked by Base UI. */
+  function goTo(href: string) {
+    setOpen(false);
+    window.setTimeout(() => {
+      router.push(href);
+      router.refresh();
+    }, 0);
+  }
+
   return (
     <DropdownMenu open={open} onOpenChange={handleOpenChange}>
       <DropdownMenuTrigger
@@ -129,21 +139,18 @@ export function NotificationBell() {
             </p>
           </div>
         ) : (
-          <ul className="max-h-80 overflow-y-auto py-1">
+          <div className="max-h-80 overflow-y-auto py-1">
             {payload.items.map((item) => (
-              <li key={item.id}>
-                <NotificationRow item={item} onNavigate={() => setOpen(false)} />
-              </li>
+              <NotificationRow key={item.id} item={item} onGo={goTo} />
             ))}
-          </ul>
+          </div>
         )}
 
         <DropdownMenuSeparator className="my-0" />
         <div className="p-1.5">
           <DropdownMenuItem
             className="cursor-pointer justify-center text-xs font-medium text-primary"
-            render={<Link href="/online-booking" />}
-            onClick={() => setOpen(false)}
+            onClick={() => goTo("/online-booking")}
           >
             Open online booking
           </DropdownMenuItem>
@@ -155,10 +162,10 @@ export function NotificationBell() {
 
 function NotificationRow({
   item,
-  onNavigate,
+  onGo,
 }: {
   item: AppNotification;
-  onNavigate: () => void;
+  onGo: (href: string) => void;
 }) {
   const Icon = item.kind === "pending_payment" ? CircleDollarSign : CalendarClock;
 
@@ -168,8 +175,7 @@ function NotificationRow({
         "cursor-pointer items-start gap-3 rounded-none px-3 py-2.5 focus:bg-accent/70",
         item.actionable && "bg-amber-50/60 focus:bg-amber-50"
       )}
-      render={<Link href={item.href} />}
-      onClick={onNavigate}
+      onClick={() => onGo(item.href)}
     >
       <span
         className={cn(

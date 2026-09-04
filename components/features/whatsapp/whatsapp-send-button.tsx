@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { buildWhatsAppSendUrl } from "@/lib/whatsapp/links";
+import { buildCustomerThanksMessage } from "@/lib/whatsapp/thanks-message";
 import { Button } from "@/components/ui/button";
 import { MessageCircle } from "lucide-react";
 
@@ -21,10 +22,7 @@ export function WhatsAppSendButton({
   const [error, setError] = useState<string | null>(null);
 
   function openChat() {
-    const firstName = customerName?.split(" ")[0];
-    const body = firstName
-      ? `Hi ${firstName}, this is Hair & Care Salon.`
-      : "Hi, this is Hair & Care Salon.";
+    const body = buildCustomerThanksMessage({ fullName: customerName });
     const url = buildWhatsAppSendUrl(phone, body);
 
     if (!url) {
