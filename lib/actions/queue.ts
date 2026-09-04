@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { queueDeviceCommand, findDeviceByType } from "@/lib/devices/helpers";
+import { queueOpenCashDrawer } from "@/lib/devices/cash-drawer";
 import { requireMinimumRole } from "@/lib/auth/permissions";
 import { requireOrganization } from "@/lib/auth/organization";
 import { createClient } from "@/lib/supabase/server";
@@ -288,11 +289,8 @@ export async function getTodayQueue() {
 
 export async function openDrawer(source = "manual"): Promise<ActionResult> {
   const org = await requireMinimumRole("CASHIER");
-  const drawerId = await findDeviceByType(org.organizationId, "DRAWER");
-  if (!drawerId) {
-    return { error: "No cash drawer device registered. Add one under Devices." };
-  }
-  await queueDeviceCommand(org.organizationId, drawerId, "OPEN_DRAWER", { source });
+  const result = await queueOpenCashDrawer(org.organizationId, { source });
+  if (!result.ok) return { error: result.error };
   return { success: true };
 }
 

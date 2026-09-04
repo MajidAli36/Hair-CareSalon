@@ -43,8 +43,8 @@ export function OpenDrawerButton({
         disabled={pending || !hasDrawer}
         title={
           hasDrawer
-            ? "Open the registered cash drawer"
-            : "Register a cash drawer under Devices first"
+            ? "Open cash drawer (via drawer device or receipt printer kick port)"
+            : "Register a Cash drawer or Printer under Devices, then run the device agent"
         }
         onClick={handleOpen}
       >
@@ -56,7 +56,9 @@ export function OpenDrawerButton({
         {pending ? "Opening…" : "Open drawer"}
       </Button>
       {!hasDrawer && (
-        <p className="text-xs text-muted-foreground">No cash drawer registered</p>
+        <p className="text-xs text-muted-foreground">
+          Register a drawer or printer under Devices
+        </p>
       )}
       {message && (
         <p

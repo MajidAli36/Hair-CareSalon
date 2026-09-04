@@ -23,6 +23,39 @@ export type AppNotificationsPayload = {
 type CustomerBrief = { first_name: string; last_name: string | null; phone: string | null };
 type StaffBrief = { full_name: string };
 
+type PendingDepositRow = {
+  id: string;
+  amount: number;
+  created_at: string;
+  proof_path: string | null;
+  appointment:
+    | {
+        id: string;
+        scheduled_at: string;
+        source: string;
+        customer: CustomerBrief | CustomerBrief[] | null;
+        staff: StaffBrief | StaffBrief[] | null;
+      }
+    | {
+        id: string;
+        scheduled_at: string;
+        source: string;
+        customer: CustomerBrief | CustomerBrief[] | null;
+        staff: StaffBrief | StaffBrief[] | null;
+      }[]
+    | null;
+};
+
+type RecentOnlineRow = {
+  id: string;
+  scheduled_at: string;
+  created_at: string;
+  status: string;
+  customer: CustomerBrief | CustomerBrief[] | null;
+  staff: StaffBrief | StaffBrief[] | null;
+  services: { service_name: string }[] | null;
+};
+
 function asOne<T>(value: T | T[] | null | undefined): T | null {
   if (!value) return null;
   return Array.isArray(value) ? (value[0] ?? null) : value;
@@ -35,7 +68,7 @@ export async function getAppNotifications(): Promise<AppNotificationsPayload> {
   const since = new Date();
   since.setHours(since.getHours() - 48);
 
-  const [{ data: pendingDeposits }, { data: recentOnline }] = await Promise.all([
+  const [{ data: pendingDepositsRaw }, { data: recentOnlineRaw }] = await Promise.all([
     supabase
       .from("appointment_deposits")
       .select(
@@ -78,28 +111,15 @@ export async function getAppNotifications(): Promise<AppNotificationsPayload> {
       .limit(10),
   ]);
 
+  // Nested selects are valid at runtime; generated Relationships[] makes the client types fail.
+  const pendingDeposits = (pendingDepositsRaw ?? []) as unknown as PendingDepositRow[];
+  const recentOnline = (recentOnlineRaw ?? []) as unknown as RecentOnlineRow[];
+
   const pendingItems: AppNotification[] = [];
   const pendingAppointmentIds = new Set<string>();
 
-  for (const row of pendingDeposits ?? []) {
-    const appt = asOne(
-      row.appointment as
-        | {
-            id: string;
-            scheduled_at: string;
-            source: string;
-            customer: CustomerBrief | CustomerBrief[] | null;
-            staff: StaffBrief | StaffBrief[] | null;
-          }
-        | {
-            id: string;
-            scheduled_at: string;
-            source: string;
-            customer: CustomerBrief | CustomerBrief[] | null;
-            staff: StaffBrief | StaffBrief[] | null;
-          }[]
-        | null
-    );
+  for (const row of pendingDeposits) {
+    const appt = asOne(row.appointment);
     if (!appt) continue;
     pendingAppointmentIds.add(appt.id);
 
@@ -125,12 +145,12 @@ export async function getAppNotifications(): Promise<AppNotificationsPayload> {
 
   const bookingItems: AppNotification[] = [];
 
-  for (const row of recentOnline ?? []) {
+  for (const row of recentOnline) {
     if (pendingAppointmentIds.has(row.id)) continue;
 
-    const customer = asOne(row.customer as CustomerBrief | CustomerBrief[] | null);
-    const staff = asOne(row.staff as StaffBrief | StaffBrief[] | null);
-    const services = (row.services ?? []) as { service_name: string }[];
+    const customer = asOne(row.customer);
+    const staff = asOne(row.staff);
+    const services = row.services ?? [];
     const customerName = customer
       ? formatCustomerName(customer.first_name, customer.last_name)
       : "Customer";

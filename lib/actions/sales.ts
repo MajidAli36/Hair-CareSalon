@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { writeAuditLog } from "@/lib/audit/log";
 import { queueDeviceCommand, findDeviceByType } from "@/lib/devices/helpers";
+import { queueOpenCashDrawer } from "@/lib/devices/cash-drawer";
 import { requireMinimumRole } from "@/lib/auth/permissions";
 import { requireOrganization } from "@/lib/auth/organization";
 import { createClient } from "@/lib/supabase/server";
@@ -267,10 +268,7 @@ export async function completeCheckout(
       (paymentLines.some((p) => p.method === "CASH") || payload.paymentMethod === "CASH") &&
       collectedNow > 0
     ) {
-      const drawerId = await findDeviceByType(org.organizationId, "DRAWER");
-      if (drawerId) {
-        await queueDeviceCommand(org.organizationId, drawerId, "OPEN_DRAWER", { saleId: sale.id });
-      }
+      await queueOpenCashDrawer(org.organizationId, { saleId: sale.id, source: "checkout" });
     }
     const printerId = await findDeviceByType(org.organizationId, "PRINTER");
     if (printerId) {

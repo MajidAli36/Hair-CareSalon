@@ -564,6 +564,7 @@ export type Database = {
           notes?: string | null;
           status?: "PENDING" | "APPROVED" | "REJECTED" | "REFUNDED";
           payment_reference?: string | null;
+          proof_path?: string | null;
           approved_at?: string | null;
           approved_by?: string | null;
           applied_to_sale_id?: string | null;
@@ -579,6 +580,8 @@ export type Database = {
         Update: {
           status?: "PENDING" | "APPROVED" | "REJECTED" | "REFUNDED";
           payment_reference?: string | null;
+          proof_path?: string | null;
+          notes?: string | null;
           approved_at?: string | null;
           approved_by?: string | null;
           applied_to_sale_id?: string | null;

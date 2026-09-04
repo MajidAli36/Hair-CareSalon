@@ -13,7 +13,8 @@
     "db:seed": "node scripts/seed-data.mjs",
     "db:reset-test": "node scripts/reset-for-retest.mjs",
     "db:setup": "node scripts/setup-db.mjs",
-    "db:fix-auth": "node scripts/fix-auth.mjs"
+    "db:fix-auth": "node scripts/fix-auth.mjs",
+    "device:agent": "node scripts/device-agent.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

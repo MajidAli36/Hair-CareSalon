@@ -36,7 +36,16 @@ export function DeviceRegisterForm() {
         <div className="sm:col-span-2 rounded-lg bg-muted p-3 text-sm">
           <p className="font-medium">API Key (save now — shown once):</p>
           <code className="break-all">{state.apiKey}</code>
-          <p className="mt-2 text-muted-foreground">Use header: <code>X-Device-Key: …</code></p>
+          <p className="mt-2 text-muted-foreground">
+            Use header: <code>X-Device-Key: …</code>
+          </p>
+          <p className="mt-1 text-muted-foreground">
+            Printer / drawer: put the key in <code>scripts/device-agent.env</code> as{" "}
+            <code>DEVICE_API_KEY</code>. Attendance terminal: use{" "}
+            <code>ATTENDANCE_API_KEY</code> (same file) or open{" "}
+            <code>/kiosk/attendance?key=…</code>. Then run <code>npm run device:agent</code> on the
+            POS PC when using drawer or the SDK bridge.
+          </p>
         </div>
       )}
     </form>

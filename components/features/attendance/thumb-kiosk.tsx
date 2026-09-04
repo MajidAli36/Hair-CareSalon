@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { attendanceMethodLabel } from "@/lib/attendance/labels";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { formatTime } from "@/lib/format";
-import { ArrowLeft, Fingerprint, LogIn, LogOut, Settings2 } from "lucide-react";
+import { ArrowLeft, Fingerprint, Loader2, LogIn, LogOut, Settings2 } from "lucide-react";
 
 type RecentRecord = {
   id: string;
@@ -37,6 +37,8 @@ type ScanFlash = {
 };
 
 const STORAGE_KEY = "salon-attendance-device-key";
+/** Ignore accidental double-scans from the same thumb within this window. */
+const SCAN_DEBOUNCE_MS = 2500;
 
 function readInitialDeviceKey() {
   if (typeof window === "undefined") {
@@ -58,7 +60,10 @@ export function ThumbAttendanceKiosk() {
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<ScanFlash | null>(null);
   const [setupOpen, setSetupOpen] = useState(initial.setupOpen);
+  const [scanPending, startScanTransition] = useTransition();
   const lastRecordIdRef = useRef<string | null>(null);
+  const lastScanRef = useRef<{ thumbId: string; at: number } | null>(null);
+  const scanInputRef = useRef<HTMLInputElement>(null);
 
   const loadFeed = useCallback(async (key: string) => {
     try {
@@ -92,6 +97,57 @@ export function ThumbAttendanceKiosk() {
     }
   }, []);
 
+  const submitThumbScan = useCallback(
+    (raw: string) => {
+      const thumbId = raw.trim();
+      if (!thumbId || !savedKey) return;
+
+      const now = Date.now();
+      const last = lastScanRef.current;
+      if (last && last.thumbId === thumbId && now - last.at < SCAN_DEBOUNCE_MS) {
+        return;
+      }
+      lastScanRef.current = { thumbId, at: now };
+
+      startScanTransition(async () => {
+        setError(null);
+        try {
+          const res = await fetch("/api/devices/attendance", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Device-Key": savedKey,
+            },
+            body: JSON.stringify({ thumbId, action: "toggle" }),
+          });
+          const body = (await res.json().catch(() => ({}))) as {
+            error?: string;
+            ok?: boolean;
+            staffName?: string;
+            action?: "check_in" | "check_out";
+            at?: string;
+          };
+          if (!res.ok) {
+            throw new Error(body.error ?? "Scan failed");
+          }
+          if (body.ok && body.staffName && body.action && body.at) {
+            setFlash({
+              staffName: body.staffName,
+              action: body.action,
+              at: body.at,
+            });
+          }
+          await loadFeed(savedKey);
+        } catch (e) {
+          setError(e instanceof Error ? e.message : "Scan failed");
+        } finally {
+          scanInputRef.current?.focus();
+        }
+      });
+    },
+    [savedKey, loadFeed]
+  );
+
   useEffect(() => {
     if (!savedKey) return;
     let cancelled = false;
@@ -114,6 +170,22 @@ export function ThumbAttendanceKiosk() {
     const timer = setTimeout(() => setFlash(null), 4000);
     return () => clearTimeout(timer);
   }, [flash]);
+
+  // Keep an invisible field focused so USB “keyboard wedge” scanners can type the thumb ID.
+  useEffect(() => {
+    if (!savedKey || setupOpen) return;
+    const focus = () => scanInputRef.current?.focus();
+    focus();
+    const timer = setInterval(focus, 2000);
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") focus();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [savedKey, setupOpen]);
 
   function saveKey() {
     const trimmed = deviceKey.trim();
@@ -170,12 +242,31 @@ export function ThumbAttendanceKiosk() {
 
   return (
     <div className="flex min-h-dvh flex-col bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white">
+      {/* Hidden capture field for USB scanners that type like a keyboard */}
+      <input
+        ref={scanInputRef}
+        type="text"
+        autoComplete="off"
+        autoCorrect="off"
+        spellCheck={false}
+        aria-label="Fingerprint scanner input"
+        className="pointer-events-none fixed left-0 top-0 h-px w-px opacity-0"
+        onKeyDown={(e) => {
+          if (e.key !== "Enter") return;
+          e.preventDefault();
+          const value = e.currentTarget.value;
+          e.currentTarget.value = "";
+          submitThumbScan(value);
+        }}
+      />
+
       <header className="flex items-center justify-between border-b border-white/10 px-6 py-4">
         <div>
           <p className="text-xs uppercase tracking-widest text-teal-400/80">Salon attendance</p>
           <h1 className="text-lg font-semibold">{feed?.device.name ?? "Thumb scanner"}</h1>
         </div>
         <div className="flex items-center gap-2">
+          {scanPending && <Loader2 className="size-4 animate-spin text-teal-300" />}
           <Badge variant="secondary" className="bg-teal-500/20 text-teal-100">
             {feed?.onDutyCount ?? 0} on duty
           </Badge>
@@ -207,9 +298,7 @@ export function ThumbAttendanceKiosk() {
             <p className="mt-2 text-lg">
               {flash.action === "check_in" ? "Checked in" : "Checked out"}
             </p>
-            <p className="mt-1 text-sm text-white/50">
-              {formatTime(flash.at)}
-            </p>
+            <p className="mt-1 text-sm text-white/50">{formatTime(flash.at)}</p>
           </div>
         ) : (
           <div className="text-center">
@@ -220,8 +309,8 @@ export function ThumbAttendanceKiosk() {
             </div>
             <h2 className="mt-8 text-2xl font-semibold">Place your thumb on the scanner</h2>
             <p className="mt-2 max-w-sm text-white/60">
-              Scan once to check in, scan again when leaving. Your impression is matched on the
-              biometric device.
+              Scan once to check in, scan again when leaving. USB scanners that type an ID work
+              here; SDK scanners can use the device agent bridge.
             </p>
           </div>
         )}

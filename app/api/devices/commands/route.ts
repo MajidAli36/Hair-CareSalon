@@ -1,9 +1,22 @@
 import { authenticateDevice } from "@/lib/devices/helpers";
+import { cashDrawerEscPosBase64 } from "@/lib/devices/cash-drawer";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 
 function getDeviceKey(request: Request) {
   return request.headers.get("x-device-key") ?? request.headers.get("authorization")?.replace("Bearer ", "");
+}
+
+function enrichCommandPayload(
+  command: string,
+  payload: Record<string, unknown> | null | undefined
+) {
+  const base = payload && typeof payload === "object" ? { ...payload } : {};
+  if (command === "OPEN_DRAWER" && !base.escPosBase64) {
+    base.escPosBase64 = cashDrawerEscPosBase64();
+    base.kick = base.kick ?? "ESC_POS_DRAWER";
+  }
+  return base;
 }
 
 export async function GET(request: Request) {
@@ -29,7 +42,15 @@ export async function GET(request: Request) {
       .in("id", commands.map((c) => c.id));
   }
 
-  return NextResponse.json({ commands: commands ?? [] });
+  const enriched = (commands ?? []).map((c) => ({
+    ...c,
+    payload: enrichCommandPayload(
+      c.command,
+      c.payload as Record<string, unknown> | null | undefined
+    ),
+  }));
+
+  return NextResponse.json({ commands: enriched });
 }
 
 export async function POST(request: Request) {

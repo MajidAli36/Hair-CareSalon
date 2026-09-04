@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getPosCatalog } from "@/lib/actions/products";
 import { getAppointmentsForPos } from "@/lib/actions/appointments";
 import { canUsePos, canManageRecords } from "@/lib/auth/permissions";
-import { findDeviceByType } from "@/lib/devices/helpers";
+import { hasCashDrawerHardware } from "@/lib/devices/cash-drawer";
 import { requireOrganization } from "@/lib/auth/organization";
 import { PosTerminal } from "@/components/features/pos/pos-terminal";
 import { OpenDrawerButton } from "@/components/features/pos/open-drawer-button";
@@ -12,11 +12,11 @@ export default async function PosPage() {
   if (!canPos) redirect("/dashboard");
 
   const org = await requireOrganization();
-  const [catalog, appointments, canManage, drawerId] = await Promise.all([
+  const [catalog, appointments, canManage, hasDrawer] = await Promise.all([
     getPosCatalog(),
     getAppointmentsForPos().catch(() => []),
     canManageRecords(),
-    findDeviceByType(org.organizationId, "DRAWER"),
+    hasCashDrawerHardware(org.organizationId),
   ]);
 
   return (
@@ -28,7 +28,7 @@ export default async function PosPage() {
             Add items to cart and complete checkout. Select an appointment to apply advance credit.
           </p>
         </div>
-        <OpenDrawerButton hasDrawer={Boolean(drawerId)} source="pos" />
+        <OpenDrawerButton hasDrawer={hasDrawer} source="pos" />
       </div>
       <PosTerminal
         services={catalog.services}

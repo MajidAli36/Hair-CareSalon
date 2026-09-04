@@ -113,9 +113,10 @@ export function AttendanceDashboard({
               Thumb impression attendance
             </CardTitle>
             <CardDescription>
-              Primary check-in method — staff scan their thumb on the biometric terminal at the
-              salon entrance. {overview.enrolledCount} of {overview.activeStaffCount} stylists
-              enrolled. Use manual check-in below when needed.
+              Primary check-in method — staff scan their thumb on the biometric terminal.{" "}
+              {overview.enrolledCount} of {overview.activeStaffCount} stylists enrolled. Enroll
+              thumb IDs below, open the kiosk (USB scanners), or use the device agent bridge for SDK
+              scanners. Manual check-in is available if the scanner is offline.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">

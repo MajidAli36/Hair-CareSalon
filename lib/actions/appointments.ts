@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { writeAuditLog } from "@/lib/audit/log";
 import { queueDeviceCommand, findDeviceByType } from "@/lib/devices/helpers";
+import { queueOpenCashDrawer } from "@/lib/devices/cash-drawer";
 import { requireMinimumRole } from "@/lib/auth/permissions";
 import { requireOrganization } from "@/lib/auth/organization";
 import { createClient } from "@/lib/supabase/server";
@@ -121,12 +122,7 @@ export async function createAppointment(
       .eq("id", appt.id);
 
     if (advanceMethod === "CASH") {
-      const drawerId = await findDeviceByType(org.organizationId, "DRAWER");
-      if (drawerId) {
-        await queueDeviceCommand(org.organizationId, drawerId, "OPEN_DRAWER", {
-          reason: "appointment_advance",
-        });
-      }
+      await queueOpenCashDrawer(org.organizationId, { reason: "appointment_advance" });
     }
   }
 
@@ -258,9 +254,8 @@ export async function recordManualAppointmentPayment(
     metadata: { amount, method },
   });
 
-  const drawerId = await findDeviceByType(org.organizationId, "DRAWER");
-  if (drawerId && method === "CASH") {
-    await queueDeviceCommand(org.organizationId, drawerId, "OPEN_DRAWER", { reason: "manual_payment" });
+  if (method === "CASH") {
+    await queueOpenCashDrawer(org.organizationId, { reason: "manual_payment" });
   }
 
   revalidatePath("/appointments");
