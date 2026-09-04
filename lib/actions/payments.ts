@@ -12,6 +12,7 @@ import {
   type DueInvoice,
 } from "@/lib/sales/payment-balance";
 import { syncSalePaymentDenorm } from "@/lib/sales/sync-payment-denorm";
+import { endOfLocalDay, startOfLocalDay } from "@/lib/dates/local";
 import type { ActionResult, PaymentMethod } from "@/types/commerce";
 
 function revalidatePaymentPaths(saleId: string, customerId?: string | null) {
@@ -412,8 +413,8 @@ export async function getCustomerStatement(
 
   events.sort((a, b) => a.date.localeCompare(b.date));
 
-  const fromTs = from ? new Date(from).getTime() : null;
-  const toTs = to ? new Date(`${to}T23:59:59`).getTime() : null;
+  const fromTs = from ? startOfLocalDay(from).getTime() : null;
+  const toTs = to ? endOfLocalDay(to).getTime() : null;
 
   let balance = 0;
   let openingBalance = 0;

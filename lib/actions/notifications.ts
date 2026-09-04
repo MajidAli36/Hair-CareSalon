@@ -3,6 +3,7 @@
 import { requireOrganization } from "@/lib/auth/organization";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency, formatCustomerName, formatDateTime } from "@/lib/format";
+import { isoToLocalDateString } from "@/lib/dates/local";
 
 export type AppNotification = {
   id: string;
@@ -131,13 +132,15 @@ export async function getAppNotifications(): Promise<AppNotificationsPayload> {
     const phone = customer?.phone ? ` · ${customer.phone}` : "";
     const stylist = staff?.full_name ? ` with ${staff.full_name}` : "";
 
+    const visitDay = isoToLocalDateString(appt.scheduled_at);
+
     pendingItems.push({
       id: `deposit-${row.id}`,
       kind: "pending_payment",
       title: "Payment proof waiting",
       body: `${customerName}${phone} sent ${formatCurrency(Number(row.amount))}${stylist}`,
       meta: `Visit ${formatDateTime(appt.scheduled_at)}`,
-      href: "/online-booking",
+      href: `/online-booking?date=${visitDay}&focus=deposits`,
       createdAt: row.created_at,
       actionable: true,
     });
@@ -158,7 +161,7 @@ export async function getAppNotifications(): Promise<AppNotificationsPayload> {
     const servicesLabel =
       serviceNames.length > 0 ? serviceNames.slice(0, 2).join(", ") : "Online booking";
     const stylist = staff?.full_name ? ` · ${staff.full_name}` : "";
-    const visitDay = row.scheduled_at.slice(0, 10);
+    const visitDay = isoToLocalDateString(row.scheduled_at);
 
     bookingItems.push({
       id: `booking-${row.id}`,

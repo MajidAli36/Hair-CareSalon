@@ -7,6 +7,7 @@ import {
   fetchSaleItems,
   getSupabase,
 } from "@/lib/reports/context";
+import { getLocalHour } from "@/lib/dates/local";
 import type { CompareResult } from "@/lib/reports/range";
 
 export type ServiceRow = {
@@ -59,7 +60,7 @@ export async function getServicesReport(from?: string, to?: string): Promise<Ser
   for (const item of curSvc) {
     const iso = saleTime.get(item.sale_id);
     if (!iso) continue;
-    const hour = String(new Date(iso).getHours()).padStart(2, "0");
+    const hour = String(getLocalHour(new Date(iso))).padStart(2, "0");
     byHour[hour] = (byHour[hour] ?? 0) + item.quantity;
   }
 

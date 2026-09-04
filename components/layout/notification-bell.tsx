@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Bell, CalendarClock, CircleDollarSign, Loader2 } from "lucide-react";
 import {
   getAppNotifications,
@@ -12,6 +11,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -33,7 +33,6 @@ function relativeTime(iso: string): string {
 }
 
 export function NotificationBell() {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [payload, setPayload] = useState<AppNotificationsPayload>({
@@ -132,28 +131,22 @@ export function NotificationBell() {
         ) : (
           <ul className="max-h-80 overflow-y-auto py-1">
             {payload.items.map((item) => (
-              <NotificationRow
-                key={item.id}
-                item={item}
-                onNavigate={() => {
-                  setOpen(false);
-                  router.push(item.href);
-                  router.refresh();
-                }}
-              />
+              <li key={item.id}>
+                <NotificationRow item={item} onNavigate={() => setOpen(false)} />
+              </li>
             ))}
           </ul>
         )}
 
         <DropdownMenuSeparator className="my-0" />
         <div className="p-1.5">
-          <Link
-            href="/online-booking"
+          <DropdownMenuItem
+            className="cursor-pointer justify-center text-xs font-medium text-primary"
+            render={<Link href="/online-booking" />}
             onClick={() => setOpen(false)}
-            className="flex w-full items-center justify-center rounded-md px-2 py-2 text-xs font-medium text-primary hover:bg-accent"
           >
             Open online booking
-          </Link>
+          </DropdownMenuItem>
         </div>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -170,41 +163,39 @@ function NotificationRow({
   const Icon = item.kind === "pending_payment" ? CircleDollarSign : CalendarClock;
 
   return (
-    <li>
-      <button
-        type="button"
-        onClick={onNavigate}
+    <DropdownMenuItem
+      className={cn(
+        "cursor-pointer items-start gap-3 rounded-none px-3 py-2.5 focus:bg-accent/70",
+        item.actionable && "bg-amber-50/60 focus:bg-amber-50"
+      )}
+      render={<Link href={item.href} />}
+      onClick={onNavigate}
+    >
+      <span
         className={cn(
-          "flex w-full gap-3 px-3 py-2.5 text-left transition-colors hover:bg-accent/70",
-          item.actionable && "bg-amber-50/60 hover:bg-amber-50"
+          "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full",
+          item.actionable
+            ? "bg-amber-100 text-amber-800"
+            : "bg-muted text-muted-foreground"
         )}
       >
-        <span
-          className={cn(
-            "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full",
-            item.actionable
-              ? "bg-amber-100 text-amber-800"
-              : "bg-muted text-muted-foreground"
-          )}
-        >
-          <Icon className="size-4" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="flex items-start justify-between gap-2">
-            <span className="text-sm font-medium text-foreground">{item.title}</span>
-            <span className="shrink-0 text-[10px] text-muted-foreground">
-              {relativeTime(item.createdAt)}
-            </span>
+        <Icon className="size-4" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-start justify-between gap-2">
+          <span className="text-sm font-medium text-foreground">{item.title}</span>
+          <span className="shrink-0 text-[10px] text-muted-foreground">
+            {relativeTime(item.createdAt)}
           </span>
-          <span className="mt-0.5 line-clamp-2 text-xs text-foreground/80">{item.body}</span>
-          <span className="mt-1 block text-[11px] text-muted-foreground">{item.meta}</span>
-          {item.actionable && (
-            <span className="mt-1.5 inline-flex text-[11px] font-semibold text-amber-800">
-              Review payment →
-            </span>
-          )}
         </span>
-      </button>
-    </li>
+        <span className="mt-0.5 line-clamp-2 text-xs text-foreground/80">{item.body}</span>
+        <span className="mt-1 block text-[11px] text-muted-foreground">{item.meta}</span>
+        {item.actionable && (
+          <span className="mt-1.5 inline-flex text-[11px] font-semibold text-amber-800">
+            Review payment →
+          </span>
+        )}
+      </span>
+    </DropdownMenuItem>
   );
 }

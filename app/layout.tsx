@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { SiteJsonLd } from "@/components/seo/site-json-ld";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { buildRootMetadata } from "@/lib/seo/site";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -13,13 +15,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: {
-    default: "Hair & Care Salon",
-    template: "%s | Hair & Care Salon",
-  },
-  description: "Premium salon and hair care — book online at Hair & Care Salon.",
-};
+export const metadata: Metadata = buildRootMetadata();
 
 export default function RootLayout({
   children,
@@ -31,6 +27,11 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        <SiteJsonLd />
+        <link rel="author" href="https://syncops.tech" title="SyncOps" />
+        <link rel="me" href="https://syncops.tech" />
+      </head>
       <body className="flex min-h-full flex-col">
         <TooltipProvider>{children}</TooltipProvider>
       </body>

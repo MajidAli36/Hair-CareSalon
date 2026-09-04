@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatDateTime, formatTime } from "@/lib/format";
+import { getLocalDateString, getLocalTimeString, pakistanDateTimeToIso } from "@/lib/dates/local";
 import { cn } from "@/lib/utils";
 import { Clock, LogIn, LogOut } from "lucide-react";
 
@@ -30,17 +31,20 @@ type ManualAttendancePanelProps = {
   onDuty: OnDutyRow[];
 };
 
-/** Local datetime-local value for an input (yyyy-MM-ddTHH:mm). */
+/** Pakistan datetime-local value for an input (yyyy-MM-ddTHH:mm). */
 function toLocalInputValue(date = new Date()) {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return `${getLocalDateString(date)}T${getLocalTimeString(date)}`;
 }
 
 function localInputToIso(value: string) {
   if (!value.trim()) return null;
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toISOString();
+  const [dateStr, timeStr] = value.split("T");
+  if (!dateStr || !timeStr) return null;
+  try {
+    return pakistanDateTimeToIso(dateStr, timeStr.slice(0, 5));
+  } catch {
+    return null;
+  }
 }
 
 export function ManualAttendancePanel({ staff, onDuty }: ManualAttendancePanelProps) {

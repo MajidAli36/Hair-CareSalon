@@ -1,6 +1,6 @@
 "use server";
 
-import { isoToLocalDateString } from "@/lib/dates/local";
+import { getLocalHour, isoToLocalDateString } from "@/lib/dates/local";
 import { formatCustomerName } from "@/lib/format";
 import {
   cmp,
@@ -93,7 +93,7 @@ export async function getSalesReport(from?: string, to?: string): Promise<SalesR
     const d = new Date(s.completed_at);
     const day = isoToLocalDateString(s.completed_at);
     byDay[day] = (byDay[day] ?? 0) + s.total;
-    const hour = String(d.getHours()).padStart(2, "0");
+    const hour = String(getLocalHour(d)).padStart(2, "0");
     byHour[hour] = (byHour[hour] ?? 0) + 1;
   }
 

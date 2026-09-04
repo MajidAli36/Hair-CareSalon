@@ -17,6 +17,7 @@ import {
   validateCheckoutPayments,
 } from "@/lib/sales/payment-balance";
 import { syncSalePaymentDenorm } from "@/lib/sales/sync-payment-denorm";
+import { getLocalDateString } from "@/lib/dates/local";
 
 async function nextInvoiceNumber(organizationId: string) {
   const supabase = await createClient();
@@ -389,7 +390,7 @@ export async function voidSale(
       category: "OTHER",
       amount: netCollected,
       description: `Voided invoice refund — ${voidReason}`,
-      expense_date: new Date().toISOString().slice(0, 10),
+      expense_date: getLocalDateString(),
       payment_method: "CASH",
       created_by: user?.id ?? null,
     });

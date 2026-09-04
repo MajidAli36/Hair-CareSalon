@@ -13,6 +13,7 @@ import {
   type DepositLine,
 } from "@/lib/booking/pricing";
 import type { ActionResult } from "@/types/commerce";
+import { getLocalDateString } from "@/lib/dates/local";
 
 const refundSchema = z.object({
   depositId: z.string().uuid(),
@@ -153,7 +154,7 @@ export async function revertAppointmentDeposit(
 
   if (updateErr) return { error: updateErr.message };
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getLocalDateString();
   await supabase.from("expenses").insert({
     organization_id: org.organizationId,
     category: "OTHER",

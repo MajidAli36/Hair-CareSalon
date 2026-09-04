@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatCustomerName, formatDate, formatTime } from "@/lib/format";
+import { getLocalDateString } from "@/lib/dates/local";
 import type { CartItem, PaymentMethod } from "@/types/commerce";
 import { cn } from "@/lib/utils";
 import { X } from "lucide-react";
@@ -34,7 +35,7 @@ type PosTerminalProps = {
 
 function formatApptLabel(a: PosAppointment) {
   const date = new Date(a.scheduledAt);
-  const isToday = date.toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10);
+  const isToday = getLocalDateString(date) === getLocalDateString();
   const time = formatTime(date);
   const day = isToday ? time : `${formatDate(date)} ${time}`;
   const advance = a.depositBalance > 0 ? ` · ${formatCurrency(a.depositBalance)} advance` : "";

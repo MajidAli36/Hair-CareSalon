@@ -10,12 +10,13 @@ import { OnlineBookingHub } from "@/components/features/online-booking/online-bo
 import { getLocalDateString } from "@/lib/dates/local";
 
 type PageProps = {
-  searchParams: Promise<{ date?: string }>;
+  searchParams: Promise<{ date?: string; focus?: string }>;
 };
 
 export default async function OnlineBookingPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const initialDate = params.date ?? getLocalDateString();
+  const focus = params.focus === "deposits" ? "deposits" : null;
   const org = await requireOrganization();
   const supabase = await createClient();
   const { data: orgRow } = await supabase
@@ -43,6 +44,7 @@ export default async function OnlineBookingPage({ searchParams }: PageProps) {
       advanceSettings={advanceSettings}
       initialPendingCount={pendingCount}
       publicUrl={publicUrl}
+      focus={focus}
     />
   );
 }

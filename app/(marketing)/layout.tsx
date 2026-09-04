@@ -3,6 +3,8 @@ import { Cormorant_Garamond, Outfit } from "next/font/google";
 import { SiteFooter } from "@/components/marketing/site-footer";
 import { SiteHeader } from "@/components/marketing/site-header";
 import { BRAND } from "@/lib/marketing/brand";
+import { SYNCOPS } from "@/lib/print/syncops";
+import { SITE_SEO } from "@/lib/seo/site";
 
 const display = Cormorant_Garamond({
   subsets: ["latin"],
@@ -20,10 +22,15 @@ const sans = Outfit({
 
 export const metadata: Metadata = {
   title: {
-    default: `${BRAND.name} — Precision hair care`,
-    template: `%s | ${BRAND.name}`,
+    default: `${BRAND.name} — ${BRAND.tagline} · ${SYNCOPS.name}`,
+    template: SITE_SEO.titleTemplate,
   },
-  description: `${BRAND.name} — expert stylists, considered treatments, and effortless online booking.`,
+  description: SITE_SEO.description,
+  openGraph: {
+    title: `${BRAND.name} — ${BRAND.tagline} · ${SYNCOPS.name}`,
+    description: SITE_SEO.description,
+    siteName: `${BRAND.name} · ${SYNCOPS.name}`,
+  },
 };
 
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {

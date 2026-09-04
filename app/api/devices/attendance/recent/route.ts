@@ -1,5 +1,6 @@
 import { authenticateDevice } from "@/lib/devices/helpers";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { endOfLocalDay, getLocalDateString, startOfLocalDay } from "@/lib/dates/local";
 import { NextResponse } from "next/server";
 
 function getDeviceKey(request: Request) {
@@ -26,15 +27,17 @@ export async function GET(request: Request) {
     20,
     Math.max(1, Number(new URL(request.url).searchParams.get("limit") ?? "10"))
   );
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getLocalDateString();
+  const dayStart = startOfLocalDay(today).toISOString();
+  const dayEnd = endOfLocalDay(today).toISOString();
 
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("staff_attendance")
     .select("id, check_in_at, check_out_at, method, staff:staff(id, full_name)")
     .eq("organization_id", device.organization_id)
-    .gte("check_in_at", `${today}T00:00:00`)
-    .lte("check_in_at", `${today}T23:59:59.999`)
+    .gte("check_in_at", dayStart)
+    .lte("check_in_at", dayEnd)
     .order("check_in_at", { ascending: false })
     .limit(limit);
 

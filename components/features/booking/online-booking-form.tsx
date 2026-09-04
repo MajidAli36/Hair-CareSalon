@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { getLocalDateString } from "@/lib/dates/local";
+import { addLocalDays, getLocalDateString } from "@/lib/dates/local";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -74,10 +74,8 @@ export function OnlineBookingForm({
 
   useEffect(() => {
     const min = getLocalDateString();
-    const maxAnchor = new Date();
-    maxAnchor.setDate(maxAnchor.getDate() + daysAhead);
     setMinDateStr(min);
-    setMaxDateStr(getLocalDateString(maxAnchor));
+    setMaxDateStr(addLocalDays(min, daysAhead));
     setDate(defaultBookingDate());
   }, [daysAhead]);
 

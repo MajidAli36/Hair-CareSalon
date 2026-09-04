@@ -21,10 +21,11 @@ export function SyncOpsCredit({ className = "", variant = "dark" }: SyncOpsCredi
       <a
         href={SYNCOPS.url}
         target="_blank"
-        rel="noopener noreferrer"
+        rel="noopener noreferrer me author"
+        title={`${SYNCOPS.name} — ${SYNCOPS.domain}`}
         className="underline-offset-2 hover:underline"
       >
-        syncops.tech
+        {SYNCOPS.domain}
       </a>
     </p>
   );

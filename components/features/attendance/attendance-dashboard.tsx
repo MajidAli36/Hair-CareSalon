@@ -17,6 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { PaginatedList } from "@/components/ui/table-pagination";
 import { cn } from "@/lib/utils";
 import { formatDateTime } from "@/lib/format";
+import { addLocalDays, getLocalDateString, startOfLocalMonth } from "@/lib/dates/local";
 import { ExternalLink, Fingerprint, Monitor } from "lucide-react";
 
 type StaffMember = {
@@ -79,16 +80,12 @@ export function AttendanceDashboard({
   }
 
   function setPreset(preset: "today" | "week" | "month") {
-    const today = new Date();
-    const toStr = today.toISOString().slice(0, 10);
+    const toStr = getLocalDateString();
     let fromStr = toStr;
     if (preset === "week") {
-      const d = new Date(today);
-      d.setDate(d.getDate() - 6);
-      fromStr = d.toISOString().slice(0, 10);
+      fromStr = addLocalDays(toStr, -6);
     } else if (preset === "month") {
-      const d = new Date(today.getFullYear(), today.getMonth(), 1);
-      fromStr = d.toISOString().slice(0, 10);
+      fromStr = startOfLocalMonth(toStr);
     }
     setParams({ from: fromStr, to: toStr, view: preset === "today" ? "daily" : "range" });
   }

@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { issueWalkInToken, updateTokenStatus, openDrawer } from "@/lib/actions/queue";
 import { getTokenReceiptHtml } from "@/lib/actions/print";
 import { printThermalHtml } from "@/lib/print/browser";
-import { getLocalDateString } from "@/lib/dates/local";
+import { getLocalDateString, getLocalTimeString } from "@/lib/dates/local";
 import { CustomerPicker } from "@/components/features/queue/customer-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,8 +59,7 @@ type Props = {
 };
 
 function currentTimeValue() {
-  const now = new Date();
-  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  return getLocalTimeString();
 }
 
 export function QueueBoard({

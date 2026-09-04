@@ -7,7 +7,7 @@ import { getCustomers } from "@/lib/actions/customers";
 import { getLowStockProducts } from "@/lib/actions/products";
 import { getReportsSummary } from "@/lib/actions/reports";
 import { getFinancialSummary } from "@/lib/actions/finances";
-import { getLocalDateString } from "@/lib/dates/local";
+import { getLocalDateString, addLocalDays, startOfLocalDay } from "@/lib/dates/local";
 
 export type DashboardAppointment = {
   id: string;
@@ -84,16 +84,10 @@ export async function getDashboardData(): Promise<DashboardData> {
   const org = await requireOrganization();
   const supabase = await createClient();
 
-  const today = new Date();
-  const todayStr = getLocalDateString(today);
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = getLocalDateString(yesterday);
-  const weekAgo = new Date(today);
-  weekAgo.setDate(weekAgo.getDate() - 7);
-
-  const thirtyDaysAgo = new Date(today);
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const todayStr = getLocalDateString();
+  const yesterdayStr = addLocalDays(todayStr, -1);
+  const weekAgo = startOfLocalDay(addLocalDays(todayStr, -7));
+  const thirtyDaysAgo = startOfLocalDay(addLocalDays(todayStr, -30));
 
   const [
     todayFinancesRaw,

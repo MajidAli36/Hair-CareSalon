@@ -1,3 +1,5 @@
+import { APP_TIMEZONE, getLocalHour } from "@/lib/dates/local";
+
 export function formatCurrency(amount: number | string) {
   const value = typeof amount === "string" ? parseFloat(amount) : amount;
   if (Number.isNaN(value)) return "Rs 0";
@@ -30,6 +32,7 @@ export function formatDate(date: Date | string, style: "short" | "long" | "weekd
   const d = typeof date === "string" ? new Date(date) : date;
   if (style === "long") {
     return d.toLocaleDateString("en-PK", {
+      timeZone: APP_TIMEZONE,
       weekday: "long",
       year: "numeric",
       month: "long",
@@ -37,22 +40,33 @@ export function formatDate(date: Date | string, style: "short" | "long" | "weekd
     });
   }
   if (style === "weekday") {
-    return d.toLocaleDateString("en-PK", { weekday: "long", month: "long", day: "numeric" });
+    return d.toLocaleDateString("en-PK", {
+      timeZone: APP_TIMEZONE,
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+    });
   }
-  return d.toLocaleDateString("en-PK", { month: "short", day: "numeric", year: "numeric" });
+  return d.toLocaleDateString("en-PK", {
+    timeZone: APP_TIMEZONE,
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
-/** Always 12-hour with AM/PM — stable across SSR and client (en-PK). */
+/** Always 12-hour with AM/PM in Pakistan time — stable across SSR and client. */
 export function formatTime(date: Date | string) {
   const d = typeof date === "string" ? new Date(date) : date;
   return d.toLocaleTimeString("en-PK", {
+    timeZone: APP_TIMEZONE,
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
   });
 }
 
-/** Date + AM/PM time, e.g. "Sep 3, 2026 · 5:57 PM" */
+/** Date + AM/PM time, e.g. "Sep 5, 2026 · 3:07 AM" (Pakistan). */
 export function formatDateTime(date: Date | string) {
   return `${formatDate(date)} · ${formatTime(date)}`;
 }
@@ -65,7 +79,7 @@ export function formatPercentChange(current: number, previous: number) {
 }
 
 export function getGreeting(name?: string | null) {
-  const hour = new Date().getHours();
+  const hour = getLocalHour();
   const timeGreeting =
     hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   const firstName = name?.split("@")[0]?.split(".")[0];

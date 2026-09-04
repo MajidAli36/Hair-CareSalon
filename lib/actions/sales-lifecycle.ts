@@ -14,6 +14,7 @@ import {
 } from "@/lib/sales/calculate";
 import { isPostedSaleStatus } from "@/lib/sales/lifecycle";
 import { syncSalePaymentDenorm } from "@/lib/sales/sync-payment-denorm";
+import { getLocalDateString } from "@/lib/dates/local";
 
 function revalidateSalePaths(saleId: string) {
   revalidatePath("/sales");
@@ -371,7 +372,7 @@ export async function amendCompletedSale(
         category: "OTHER",
         amount: adjustment.refundDue,
         description: `Invoice amendment refund — ${reason}`,
-        expense_date: new Date().toISOString().slice(0, 10),
+        expense_date: getLocalDateString(),
         payment_method: payload.refundPayment.method,
         created_by: userId,
       });
@@ -531,7 +532,7 @@ export async function refundSale(input: {
     category: "OTHER",
     amount,
     description: `Sale refund — ${reason}`,
-    expense_date: new Date().toISOString().slice(0, 10),
+    expense_date: getLocalDateString(),
     payment_method: input.method,
     created_by: user?.id ?? null,
   });

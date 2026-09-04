@@ -1,19 +1,20 @@
-/** Local calendar day bounds for appointment queries */
+import {
+  APP_TIMEZONE,
+  getLocalDateString,
+  isSameLocalDay,
+  startOfLocalDay,
+} from "@/lib/dates/local";
+
+/** Pakistan calendar day bounds for appointment queries (ISO timestamptz). */
 export function getDayRange(date: string) {
-  const start = new Date(`${date}T00:00:00`);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
+  const start = startOfLocalDay(date);
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
   return { start: start.toISOString(), end: end.toISOString() };
 }
 
+/** @deprecated Prefer isoToLocalDateString from @/lib/dates/local */
 export function toLocalDateString(iso: string): string {
-  const d = new Date(iso);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return getLocalDateString(new Date(iso));
 }
 
-export function isSameLocalDay(iso: string, date: string): boolean {
-  return toLocalDateString(iso) === date;
-}
+export { isSameLocalDay, APP_TIMEZONE };

@@ -1,5 +1,10 @@
-import { getLocalDateString } from "@/lib/dates/local";
-import { parseLocalDateRange } from "@/lib/dates/local";
+import {
+  addLocalDays,
+  getLocalDateString,
+  getLocalDayOfWeek,
+  parseLocalDateRange,
+  startOfLocalMonth,
+} from "@/lib/dates/local";
 
 export type ReportPeriodPreset =
   | "today"
@@ -42,68 +47,53 @@ export function isReportTabId(value: string | undefined | null): value is Report
   return REPORT_TABS.some((t) => t.id === value);
 }
 
-/** Inclusive day count between YYYY-MM-DD strings. */
+/** Inclusive day count between YYYY-MM-DD strings (Pakistan calendar). */
 export function daysInclusive(from: string, to: string): number {
-  const a = new Date(`${from}T12:00:00`);
-  const b = new Date(`${to}T12:00:00`);
-  return Math.max(1, Math.round((b.getTime() - a.getTime()) / 86_400_000) + 1);
+  const a = new Date(`${from}T12:00:00+05:00`).getTime();
+  const b = new Date(`${to}T12:00:00+05:00`).getTime();
+  return Math.max(1, Math.round((b - a) / 86_400_000) + 1);
 }
 
 /** Previous period of equal length ending the day before `from`. */
 export function getPreviousPeriod(from: string, to: string): { from: string; to: string } {
   const span = daysInclusive(from, to);
-  const end = new Date(`${from}T12:00:00`);
-  end.setDate(end.getDate() - 1);
-  const start = new Date(end);
-  start.setDate(start.getDate() - (span - 1));
-  return { from: getLocalDateString(start), to: getLocalDateString(end) };
+  const end = addLocalDays(from, -1);
+  const start = addLocalDays(end, -(span - 1));
+  return { from: start, to: end };
 }
 
 export function getReportPeriodRange(preset: ReportPeriodPreset): { from: string; to: string } {
-  const today = new Date();
-  const to = getLocalDateString(today);
+  const to = getLocalDateString();
 
   switch (preset) {
     case "today":
       return { from: to, to };
     case "yesterday": {
-      const d = new Date(today);
-      d.setDate(d.getDate() - 1);
-      const y = getLocalDateString(d);
+      const y = addLocalDays(to, -1);
       return { from: y, to: y };
     }
     case "this_week": {
-      const d = new Date(today);
-      const day = d.getDay(); // 0 Sun
-      const mondayOffset = day === 0 ? -6 : 1 - day;
-      d.setDate(d.getDate() + mondayOffset);
-      return { from: getLocalDateString(d), to };
+      const dow = getLocalDayOfWeek(to);
+      const mondayOffset = dow === 0 ? -6 : 1 - dow;
+      return { from: addLocalDays(to, mondayOffset), to };
     }
     case "last_week": {
-      const d = new Date(today);
-      const day = d.getDay();
-      const mondayOffset = day === 0 ? -6 : 1 - day;
-      const thisMonday = new Date(today);
-      thisMonday.setDate(d.getDate() + mondayOffset);
-      const lastSunday = new Date(thisMonday);
-      lastSunday.setDate(thisMonday.getDate() - 1);
-      const lastMonday = new Date(lastSunday);
-      lastMonday.setDate(lastSunday.getDate() - 6);
-      return { from: getLocalDateString(lastMonday), to: getLocalDateString(lastSunday) };
+      const dow = getLocalDayOfWeek(to);
+      const mondayOffset = dow === 0 ? -6 : 1 - dow;
+      const thisMonday = addLocalDays(to, mondayOffset);
+      const lastSunday = addLocalDays(thisMonday, -1);
+      const lastMonday = addLocalDays(lastSunday, -6);
+      return { from: lastMonday, to: lastSunday };
     }
-    case "this_month": {
-      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-      return { from: getLocalDateString(monthStart), to };
-    }
+    case "this_month":
+      return { from: startOfLocalMonth(to), to };
     case "last_month": {
-      const start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-      const end = new Date(today.getFullYear(), today.getMonth(), 0);
-      return { from: getLocalDateString(start), to: getLocalDateString(end) };
+      const thisMonthStart = startOfLocalMonth(to);
+      const lastMonthEnd = addLocalDays(thisMonthStart, -1);
+      return { from: startOfLocalMonth(lastMonthEnd), to: lastMonthEnd };
     }
-    case "this_year": {
-      const start = new Date(today.getFullYear(), 0, 1);
-      return { from: getLocalDateString(start), to };
-    }
+    case "this_year":
+      return { from: `${to.slice(0, 4)}-01-01`, to };
     default:
       return { from: to, to };
   }

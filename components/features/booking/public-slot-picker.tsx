@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { getPublicAvailableSlots } from "@/lib/actions/scheduling";
 import type { BookableSlot } from "@/lib/booking/availability";
+import { getLocalDateString } from "@/lib/dates/local";
 import { Label } from "@/components/ui/label";
 
 type PublicSlotPickerProps = {
@@ -68,11 +69,7 @@ export function PublicSlotPicker({
   } else if (pending || !loaded) {
     hint = null;
   } else if (showEmpty) {
-    const today = new Date();
-    const y = today.getFullYear();
-    const m = String(today.getMonth() + 1).padStart(2, "0");
-    const d = String(today.getDate()).padStart(2, "0");
-    const isToday = date === `${y}-${m}-${d}`;
+    const isToday = date === getLocalDateString();
     hint = isToday
       ? "No more times left today. Pick tomorrow or another day."
       : "No open times for this date. Try another day, or ask the salon to set this stylist’s hours.";

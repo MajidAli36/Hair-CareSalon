@@ -2,24 +2,24 @@
 
 import { useEffect, useRef, useState } from "react";
 import { CalendarDays } from "lucide-react";
-import { getLocalDateString } from "@/lib/dates/local";
+import { getLocalDateString, addLocalDays, getLocalHour } from "@/lib/dates/local";
 import { cn } from "@/lib/utils";
 
-/** Prefer today; after 6pm local, prefer tomorrow (typical salon close). */
+/** Prefer today; after 6pm Pakistan time, prefer tomorrow (typical salon close). */
 export function defaultBookingDate(): string {
-  const now = new Date();
-  const pick = new Date(now);
-  if (now.getHours() >= 18) {
-    pick.setDate(pick.getDate() + 1);
+  const today = getLocalDateString();
+  if (getLocalHour() >= 18) {
+    return addLocalDays(today, 1);
   }
-  return getLocalDateString(pick);
+  return today;
 }
 
-/** Fixed locale so SSR and client text always match. */
+/** Fixed locale + Pakistan calendar noon so SSR and client text always match. */
 function formatBookingDate(value: string): string {
-  const d = new Date(`${value}T12:00:00`);
+  const d = new Date(`${value}T12:00:00+05:00`);
   if (Number.isNaN(d.getTime())) return "Tap to choose a date";
   return d.toLocaleDateString("en-PK", {
+    timeZone: "Asia/Karachi",
     weekday: "long",
     day: "numeric",
     month: "long",

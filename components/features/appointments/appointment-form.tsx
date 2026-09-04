@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCustomerName } from "@/lib/format";
+import { getLocalDateString } from "@/lib/dates/local";
 import type { ActionResult } from "@/types/commerce";
 
 type Props = {
@@ -19,7 +20,7 @@ type Props = {
 
 export function AppointmentForm({ customers, staff, services }: Props) {
   const [state, formAction, pending] = useActionState(createAppointment, {} as ActionResult);
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(getLocalDateString);
   const [staffId, setStaffId] = useState("none");
   const [serviceIds, setServiceIds] = useState<string[]>([]);
 

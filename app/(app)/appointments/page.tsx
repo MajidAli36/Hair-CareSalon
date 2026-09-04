@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getApprovedDepositTotal, getPendingDepositTotal, sumServicePrices } from "@/lib/booking/pricing";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { getLocalDateString } from "@/lib/dates/local";
 
 type PageProps = {
   searchParams: Promise<{ date?: string }>;
@@ -15,10 +16,10 @@ type PageProps = {
 
 export default async function AppointmentsPage({ searchParams }: PageProps) {
   const params = await searchParams;
-  const date = params.date ?? new Date().toISOString().slice(0, 10);
+  const date = params.date ?? getLocalDateString();
   const appointments = await getAppointments(date, { source: "STAFF" });
 
-  const formattedDate = formatDate(`${date}T12:00:00`, "long");
+  const formattedDate = formatDate(`${date}T12:00:00+05:00`, "long");
 
   const totalServices = appointments.reduce(
     (sum, a) => sum + sumServicePrices(a.services ?? []),

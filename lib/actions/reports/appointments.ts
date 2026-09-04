@@ -1,7 +1,7 @@
 "use server";
 
 import { formatCustomerName } from "@/lib/format";
-import { isoToLocalDateString } from "@/lib/dates/local";
+import { getLocalDayOfWeek, getLocalHour, isoToLocalDateString } from "@/lib/dates/local";
 import {
   cmp,
   createReportContext,
@@ -127,7 +127,7 @@ export async function getAppointmentsReport(
     byStaff[staffKey] = (byStaff[staffKey] ?? 0) + 1;
 
     const d = new Date(a.scheduled_at);
-    const key = `${d.getDay()}-${d.getHours()}`;
+    const key = `${getLocalDayOfWeek(isoToLocalDateString(a.scheduled_at))}-${getLocalHour(d)}`;
     heatmapMap.set(key, (heatmapMap.get(key) ?? 0) + 1);
 
     for (const s of servicesByAppt.get(a.id) ?? []) {

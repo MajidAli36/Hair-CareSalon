@@ -3,6 +3,7 @@
 import { requireOrganization } from "@/lib/auth/organization";
 import { createClient } from "@/lib/supabase/server";
 import { recordManualAttendance } from "@/lib/actions/staff";
+import { endOfLocalDay, getLocalDateString, startOfLocalDay } from "@/lib/dates/local";
 
 export type AttendanceRecord = {
   id: string;
@@ -34,15 +35,12 @@ export type AttendanceReport = {
 };
 
 function parseDateRange(from?: string, to?: string) {
-  const end = to ? new Date(`${to}T23:59:59`) : new Date();
-  end.setHours(23, 59, 59, 999);
-
-  const start = from ? new Date(`${from}T00:00:00`) : new Date(end);
-  if (!from) {
-    start.setHours(0, 0, 0, 0);
-  }
-
-  return { start, end };
+  const toLabel = to ?? getLocalDateString();
+  const fromLabel = from ?? toLabel;
+  return {
+    start: startOfLocalDay(fromLabel),
+    end: endOfLocalDay(toLabel),
+  };
 }
 
 function sessionDurationMinutes(checkIn: string, checkOut: string | null) {
@@ -187,7 +185,7 @@ export async function getAttendanceOverview(): Promise<AttendanceOverview> {
 }
 
 export async function getTodayAttendance() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getLocalDateString();
   return getAttendanceReport(today, today);
 }
 

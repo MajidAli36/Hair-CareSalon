@@ -3,7 +3,7 @@
 import { useActionState, useMemo, useState } from "react";
 import { saveStaffSchedule } from "@/lib/actions/scheduling";
 import { DAY_NAMES } from "@/lib/booking/constants";
-import { getLocalDateString } from "@/lib/dates/local";
+import { getLocalDateString, getLocalDayOfWeek } from "@/lib/dates/local";
 import type { ActionResult } from "@/types/commerce";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,10 +22,6 @@ type StaffScheduleFormProps = {
   schedules?: StaffScheduleEntry[];
 };
 
-function dayOfWeekFromDate(dateStr: string): number {
-  return new Date(`${dateStr}T12:00:00`).getDay();
-}
-
 function timeForInput(value: string): string {
   return value.slice(0, 5);
 }
@@ -35,7 +31,7 @@ export function StaffScheduleForm({ staff, schedules = [] }: StaffScheduleFormPr
   const [staffId, setStaffId] = useState(staff[0]?.id ?? "");
   const [scheduleDate, setScheduleDate] = useState(getLocalDateString);
 
-  const dayOfWeek = useMemo(() => dayOfWeekFromDate(scheduleDate), [scheduleDate]);
+  const dayOfWeek = useMemo(() => getLocalDayOfWeek(scheduleDate), [scheduleDate]);
   const existingSchedule = useMemo(
     () => schedules.find((row) => row.staff_id === staffId && row.day_of_week === dayOfWeek),
     [schedules, staffId, dayOfWeek]

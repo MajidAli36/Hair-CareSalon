@@ -15,7 +15,13 @@ type AppointmentRow = {
 };
 
 import { isSameLocalDay } from "@/lib/booking/dates";
-import { getLocalDateString } from "@/lib/dates/local";
+import {
+  addLocalDays,
+  getLocalDateString,
+  getLocalDayOfWeek,
+  getLocalMinutesSinceMidnight,
+  pakistanDateTimeToIso,
+} from "@/lib/dates/local";
 import { formatTime } from "@/lib/format";
 
 const DEFAULT_OPEN = "09:00";
@@ -68,16 +74,11 @@ export function computeAvailableSlots(params: {
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return [];
 
-  const dayDate = new Date(`${date}T12:00:00`);
-  if (Number.isNaN(dayDate.getTime())) return [];
-
   const todayStr = getLocalDateString();
-  const maxAnchor = new Date(`${todayStr}T12:00:00`);
-  maxAnchor.setDate(maxAnchor.getDate() + maxDaysAhead);
-  const maxDateStr = getLocalDateString(maxAnchor);
+  const maxDateStr = addLocalDays(todayStr, maxDaysAhead);
   if (date < todayStr || date > maxDateStr) return [];
 
-  const dayOfWeek = dayDate.getDay();
+  const dayOfWeek = getLocalDayOfWeek(date);
   const scheduleByStaff = new Map<string, ScheduleRow>();
   for (const s of schedules) {
     if (s.day_of_week === dayOfWeek) scheduleByStaff.set(s.staff_id, s);
@@ -94,6 +95,8 @@ export function computeAvailableSlots(params: {
   }
   const slots: BookableSlot[] = [];
   const now = new Date();
+  const nowMin = getLocalMinutesSinceMidnight(now);
+  const isToday = date === todayStr;
 
   for (const member of targetStaff) {
     const sched = scheduleByStaff.get(member.id);
@@ -102,12 +105,13 @@ export function computeAvailableSlots(params: {
     if (closeMin - openMin < durationMinutes) continue;
 
     for (let startMin = openMin; startMin + durationMinutes <= closeMin; startMin += slotIntervalMinutes) {
-      const slotDate = new Date(`${date}T${minutesToTime(startMin)}:00`);
-      if (slotDate < now) continue;
+      if (isToday && startMin <= nowMin) continue;
+
+      const iso = pakistanDateTimeToIso(date, minutesToTime(startMin));
+      const slotDate = new Date(iso);
 
       const conflict = dayAppointments.some((appt) => {
-        const apptStart = new Date(appt.scheduled_at);
-        const apptStartMin = apptStart.getHours() * 60 + apptStart.getMinutes();
+        const apptStartMin = getLocalMinutesSinceMidnight(new Date(appt.scheduled_at));
         const blocksStaff = appt.staff_id === null || appt.staff_id === member.id;
         if (!blocksStaff) return false;
         return overlaps(startMin, durationMinutes, apptStartMin, appt.duration_minutes);
@@ -115,7 +119,7 @@ export function computeAvailableSlots(params: {
 
       if (!conflict) {
         slots.push({
-          iso: slotDate.toISOString(),
+          iso,
           label: formatTime(slotDate),
           staffId: member.id,
           staffName: member.full_name,

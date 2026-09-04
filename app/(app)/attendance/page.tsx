@@ -4,6 +4,7 @@ import { getStaff } from "@/lib/actions/staff";
 import { canManageRecords } from "@/lib/auth/permissions";
 import { AttendanceDashboard } from "@/components/features/attendance/attendance-dashboard";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getLocalDateString } from "@/lib/dates/local";
 
 type AttendancePageProps = {
   searchParams: Promise<{
@@ -16,7 +17,7 @@ type AttendancePageProps = {
 
 export default async function AttendancePage({ searchParams }: AttendancePageProps) {
   const params = await searchParams;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getLocalDateString();
   const from = params.from ?? today;
   const to = params.to ?? today;
   const view = params.view ?? (from === to ? "daily" : "range");

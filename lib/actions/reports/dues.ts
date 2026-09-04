@@ -1,7 +1,7 @@
 "use server";
 
 import { createReportContext, getSupabase } from "@/lib/reports/context";
-import { getLocalDateString } from "@/lib/dates/local";
+import { endOfLocalDay, getLocalDateString, startOfLocalDay } from "@/lib/dates/local";
 import { roundMoney } from "@/lib/sales/calculate";
 
 export type DueAgingBucket = {
@@ -149,13 +149,13 @@ export async function getDuesReport(from?: string, to?: string): Promise<DuesRep
       .from("payments")
       .select("amount")
       .eq("organization_id", ctx.organizationId)
-      .gte("paid_at", `${today}T00:00:00`)
-      .lte("paid_at", `${today}T23:59:59`),
+      .gte("paid_at", startOfLocalDay(today).toISOString())
+      .lte("paid_at", endOfLocalDay(today).toISOString()),
     supabase
       .from("payments")
       .select("amount")
       .eq("organization_id", ctx.organizationId)
-      .gte("paid_at", `${monthStart}T00:00:00`),
+      .gte("paid_at", startOfLocalDay(monthStart).toISOString()),
   ]);
 
   return {

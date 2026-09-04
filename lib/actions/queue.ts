@@ -7,7 +7,7 @@ import { queueOpenCashDrawer } from "@/lib/devices/cash-drawer";
 import { requireMinimumRole } from "@/lib/auth/permissions";
 import { requireOrganization } from "@/lib/auth/organization";
 import { createClient } from "@/lib/supabase/server";
-import { getLocalDateString } from "@/lib/dates/local";
+import { getLocalDateString, pakistanDateTimeToIso } from "@/lib/dates/local";
 import { formatCustomerName } from "@/lib/format";
 import type { ActionResult } from "@/types/commerce";
 
@@ -21,7 +21,7 @@ const issueSchema = z.object({
 
 function resolveIssuedAt(tokenDate: string, tokenTime?: string): string {
   if (tokenTime && /^\d{2}:\d{2}$/.test(tokenTime)) {
-    return new Date(`${tokenDate}T${tokenTime}:00`).toISOString();
+    return pakistanDateTimeToIso(tokenDate, tokenTime);
   }
   return new Date().toISOString();
 }

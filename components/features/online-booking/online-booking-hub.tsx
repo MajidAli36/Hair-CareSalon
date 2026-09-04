@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   fetchOnlineAppointments,
@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DAY_NAMES } from "@/lib/booking/constants";
-import { getLocalDateString } from "@/lib/dates/local";
+import { getLocalDateString, getLocalDayOfWeek } from "@/lib/dates/local";
 
 type StaffRow = {
   id: string;
@@ -56,6 +56,7 @@ type OnlineBookingHubProps = {
   advanceSettings: AdvanceSettings;
   initialPendingCount: number;
   publicUrl: string;
+  focus?: "deposits" | null;
 };
 
 function syncDateInUrl(date: string) {
@@ -72,12 +73,30 @@ export function OnlineBookingHub({
   advanceSettings,
   initialPendingCount,
   publicUrl,
+  focus = null,
 }: OnlineBookingHubProps) {
   const [date, setDate] = useState(initialDate);
   const [appointments, setAppointments] = useState(initialAppointments);
   const [staff, setStaff] = useState(initialStaff);
   const [pendingCount, setPendingCount] = useState(initialPendingCount);
   const [loadingAppointments, startAppointmentTransition] = useTransition();
+  const appointmentsSectionRef = useRef<HTMLDivElement>(null);
+
+  // Keep in sync when navigating from notification links (same page, new ?date=)
+  useEffect(() => {
+    setDate(initialDate);
+    setAppointments(initialAppointments);
+    setPendingCount(initialPendingCount);
+  }, [initialDate, initialAppointments, initialPendingCount]);
+
+  useEffect(() => {
+    if (focus !== "deposits") return;
+    const node = appointmentsSectionRef.current;
+    if (!node) return;
+    window.requestAnimationFrame(() => {
+      node.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [focus, initialDate, appointments]);
 
   const loadAppointments = useCallback((targetDate: string) => {
     startAppointmentTransition(async () => {
@@ -132,10 +151,7 @@ export function OnlineBookingHub({
   }
 
   const todayKey = getLocalDateString();
-  const dayOfWeek = useMemo(
-    () => new Date(`${todayKey}T12:00:00`).getDay(),
-    [todayKey]
-  );
+  const dayOfWeek = useMemo(() => getLocalDayOfWeek(todayKey), [todayKey]);
 
   const staffForToday = useMemo(() => {
     return staff
@@ -194,119 +210,120 @@ export function OnlineBookingHub({
         schedules={schedules}
       />
 
-      <Tabs defaultValue="appointments" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="appointments">Online appointments</TabsTrigger>
-          <TabsTrigger value="staff-today">Staff for today</TabsTrigger>
-        </TabsList>
+      <div ref={appointmentsSectionRef} id="online-appointments" className="scroll-mt-24">
+        <Tabs defaultValue="appointments" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="appointments">Online appointments</TabsTrigger>
+            <TabsTrigger value="staff-today">Staff for today</TabsTrigger>
+          </TabsList>
 
-        <TabsContent value="appointments">
-          <Card>
-            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
-              <div>
-                <CardTitle>Online appointments</CardTitle>
-                <CardDescription>
-                  Approve advance payments to confirm bookings. Services fees and balance shown
-                  per appointment.
-                </CardDescription>
-              </div>
-              <div className="flex items-end gap-2">
-                <div className="space-y-1">
-                  <Label htmlFor="ob-date" className="text-xs">
-                    Date
-                  </Label>
-                  <Input
-                    id="ob-date"
-                    type="date"
-                    value={date}
-                    max={getLocalDateString()}
-                    className="h-8 w-40"
-                    onChange={(e) => handleDateChange(e.target.value)}
+          <TabsContent value="appointments">
+            <Card>
+              <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
+                <div>
+                  <CardTitle>Online appointments</CardTitle>
+                  <CardDescription>
+                    Approve advance payments to confirm bookings. Services fees and balance shown
+                    per appointment.
+                  </CardDescription>
+                </div>
+                <div className="flex items-end gap-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="ob-date" className="text-xs">
+                      Date
+                    </Label>
+                    <Input
+                      id="ob-date"
+                      type="date"
+                      value={date}
+                      className="h-8 w-40"
+                      onChange={(e) => handleDateChange(e.target.value)}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={loadingAppointments}
+                    onClick={() => loadAppointments(date)}
+                  >
+                    {loadingAppointments ? "Loading…" : "Refresh"}
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {loadingAppointments ? (
+                  <div className="space-y-3">
+                    <Skeleton className="h-28 w-full rounded-xl" />
+                    <Skeleton className="h-28 w-full rounded-xl" />
+                  </div>
+                ) : (
+                  <AppointmentsScheduleTable
+                    appointments={appointments}
+                    mode="online"
+                    advanceSettings={advanceSettings ?? undefined}
+                    emptyMessage="No online appointments on this date."
+                    onDepositResolved={handleDepositResolved}
+                    onAppointmentCancelled={handleAppointmentCancelled}
                   />
-                </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={loadingAppointments}
-                  onClick={() => loadAppointments(date)}
-                >
-                  {loadingAppointments ? "Loading…" : "Refresh"}
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {loadingAppointments ? (
-                <div className="space-y-3">
-                  <Skeleton className="h-28 w-full rounded-xl" />
-                  <Skeleton className="h-28 w-full rounded-xl" />
-                </div>
-              ) : (
-                <AppointmentsScheduleTable
-                  appointments={appointments}
-                  mode="online"
-                  advanceSettings={advanceSettings ?? undefined}
-                  emptyMessage="No online appointments on this date."
-                  onDepositResolved={handleDepositResolved}
-                  onAppointmentCancelled={handleAppointmentCancelled}
-                />
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-        <TabsContent value="staff-today">
-          <Card>
-            <CardHeader>
-              <CardTitle>Staff for online booking today</CardTitle>
-              <CardDescription>
-                Stylists enabled for public booking on {DAY_NAMES[dayOfWeek]} ({todayKey}).
-                Customers only see those with hours set.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {staffForToday.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No staff enabled for online booking yet. Enable someone above.
-                </p>
-              ) : (
-                <div className="rounded-lg border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Title</TableHead>
-                        <TableHead>Today&apos;s hours</TableHead>
-                        <TableHead>Public booking</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {staffForToday.map((s) => (
-                        <TableRow key={s.id}>
-                          <TableCell className="font-medium">{s.full_name}</TableCell>
-                          <TableCell>{s.job_title ?? "—"}</TableCell>
-                          <TableCell>
-                            {s.hours ? (
-                              s.hours
-                            ) : (
-                              <span className="text-muted-foreground">No hours set</span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={s.hours ? "default" : "secondary"}>
-                              {s.hours ? "Bookable today" : "Needs schedule"}
-                            </Badge>
-                          </TableCell>
+          <TabsContent value="staff-today">
+            <Card>
+              <CardHeader>
+                <CardTitle>Staff for online booking today</CardTitle>
+                <CardDescription>
+                  Stylists enabled for public booking on {DAY_NAMES[dayOfWeek]} ({todayKey}).
+                  Customers only see those with hours set.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {staffForToday.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No staff enabled for online booking yet. Enable someone above.
+                  </p>
+                ) : (
+                  <div className="rounded-lg border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Title</TableHead>
+                          <TableHead>Today&apos;s hours</TableHead>
+                          <TableHead>Public booking</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+                      </TableHeader>
+                      <TableBody>
+                        {staffForToday.map((s) => (
+                          <TableRow key={s.id}>
+                            <TableCell className="font-medium">{s.full_name}</TableCell>
+                            <TableCell>{s.job_title ?? "—"}</TableCell>
+                            <TableCell>
+                              {s.hours ? (
+                                s.hours
+                              ) : (
+                                <span className="text-muted-foreground">No hours set</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={s.hours ? "default" : "secondary"}>
+                                {s.hours ? "Bookable today" : "Needs schedule"}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
     </div>
   );
 }

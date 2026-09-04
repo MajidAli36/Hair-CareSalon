@@ -13,6 +13,7 @@ import { validateAppointmentSlot } from "@/lib/actions/scheduling";
 import { assertCanAddDeposit, syncAppointmentAfterDepositChange } from "@/lib/actions/deposits";
 import { sumServiceDuration } from "@/lib/booking/availability";
 import { getDayRange } from "@/lib/booking/dates";
+import { addLocalDays, endOfLocalDay, getLocalDateString, startOfLocalDay } from "@/lib/dates/local";
 import { calculateRequiredAdvance, sumServicePrices } from "@/lib/booking/pricing";
 import {
   bookingNumberFromId,
@@ -278,10 +279,10 @@ export type PosAppointment = {
 export async function getAppointmentsForPos(): Promise<PosAppointment[]> {
   const org = await requireMinimumRole("CASHIER");
   const supabase = await createClient();
-  const today = new Date().toISOString().slice(0, 10);
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const since = thirtyDaysAgo.toISOString().slice(0, 10);
+  const today = getLocalDateString();
+  const since = addLocalDays(today, -30);
+  const dayStart = startOfLocalDay(today).toISOString();
+  const dayEnd = endOfLocalDay(today).toISOString();
 
   const [{ data: todayRows }, { data: depositRows }] = await Promise.all([
     supabase
@@ -297,8 +298,8 @@ export async function getAppointmentsForPos(): Promise<PosAppointment[]> {
         services:appointment_services(service_id, service_name, price)
       `)
       .eq("organization_id", org.organizationId)
-      .gte("scheduled_at", `${today}T00:00:00`)
-      .lte("scheduled_at", `${today}T23:59:59`)
+      .gte("scheduled_at", dayStart)
+      .lte("scheduled_at", dayEnd)
       .not("status", "in", '("COMPLETED","CANCELLED","NO_SHOW")')
       .order("scheduled_at"),
     supabase
@@ -332,7 +333,7 @@ export async function getAppointmentsForPos(): Promise<PosAppointment[]> {
       `)
       .eq("organization_id", org.organizationId)
       .in("id", appointmentIdsWithDeposit)
-      .gte("scheduled_at", `${since}T00:00:00`)
+      .gte("scheduled_at", startOfLocalDay(since).toISOString())
       .not("status", "in", '("COMPLETED","CANCELLED","NO_SHOW")')
       .order("scheduled_at", { ascending: false });
     depositAppointmentRows = data ?? [];

@@ -461,7 +461,7 @@ function businessHeader(business: BusinessPrintInfo) {
 
 function creditFooter() {
   return `<footer class="credit">
-    Build by <strong>${SYNCOPS.name}</strong><br/>
+    Built by <strong>${SYNCOPS.name}</strong><br/>
     <a class="credit-phone" href="tel:+923018678319">${SYNCOPS.phone}</a>
     &nbsp;·&nbsp;
     <a href="${SYNCOPS.url}">syncops.tech</a>

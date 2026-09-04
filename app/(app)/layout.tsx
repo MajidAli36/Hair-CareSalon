@@ -5,6 +5,16 @@ import { ROLE_LABELS } from "@/lib/permissions/roles";
 import { getOrgNavPermissions } from "@/lib/actions/role-permissions";
 import { getDefaultLandingPath } from "@/lib/permissions/nav";
 import { BRAND } from "@/lib/marketing/brand";
+import type { Metadata } from "next";
+import { SYNCOPS } from "@/lib/print/syncops";
+
+export const metadata: Metadata = {
+  title: {
+    default: `Dashboard | ${BRAND.name} · ${SYNCOPS.name}`,
+    template: `%s | ${BRAND.name} · ${SYNCOPS.name}`,
+  },
+  robots: { index: false, follow: false },
+};
 
 export default async function AppLayout({
   children,
