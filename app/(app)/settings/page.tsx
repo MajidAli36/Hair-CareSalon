@@ -44,7 +44,6 @@ export default async function SettingsPage() {
           <CardDescription>Webhook endpoints for external services</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2 text-sm font-mono">
-          <p>WhatsApp: <span className="text-muted-foreground">/api/webhooks/whatsapp</span></p>
           <p>Device register: <span className="text-muted-foreground">/api/devices/register</span></p>
           <p>Online booking: <span className="text-muted-foreground">/book/[org-slug]</span></p>
           <p>Health: <span className="text-muted-foreground">/api/health</span></p>

@@ -248,6 +248,9 @@ export async function setStaffOnlineBooking(
     .eq("organization_id", org.organizationId);
   if (error) return { error: error.message };
   revalidatePath("/staff");
+  revalidatePath("/online-booking");
+  revalidatePath("/book");
+  revalidatePath("/");
   return { success: true };
 }
 

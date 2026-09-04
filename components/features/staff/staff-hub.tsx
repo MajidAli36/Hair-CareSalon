@@ -5,6 +5,7 @@ import type { RoleNavMatrixRow } from "@/components/features/staff/role-permissi
 import { TeamManagement } from "@/components/features/staff/team-management";
 import { RolePermissionsEditor } from "@/components/features/staff/role-permissions-editor";
 import { StaffForm } from "@/components/features/staff/staff-forms";
+import { StaffRowActions } from "@/components/features/staff/staff-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -86,8 +87,9 @@ export function StaffHub({
             <div>
               <CardTitle>Salon team</CardTitle>
               <CardDescription>
-                Employee profiles for thumb attendance, appointments, and payroll. Enroll thumbs on
-                the Attendance page.
+                Employee profiles for thumb attendance, appointments, and payroll. To appear on the
+                public booking page, use <strong>Show on booking</strong> and set weekly hours under
+                Online booking.
               </CardDescription>
             </div>
             {canManage && (
@@ -133,6 +135,8 @@ export function StaffHub({
                         <TableHead>Thumb</TableHead>
                         <TableHead>App login</TableHead>
                         <TableHead>Status</TableHead>
+                        <TableHead>Online booking</TableHead>
+                        {canManage && <TableHead className="text-right">Actions</TableHead>}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -168,15 +172,27 @@ export function StaffHub({
                               )}
                             </TableCell>
                             <TableCell>
-                              <div className="flex flex-wrap gap-1">
-                                <Badge variant={s.is_active ? "default" : "secondary"}>
-                                  {s.is_active ? "Active" : "Inactive"}
-                                </Badge>
-                                {s.online_booking_enabled && (
-                                  <Badge variant="outline">Online booking</Badge>
-                                )}
-                              </div>
+                              <Badge variant={s.is_active ? "default" : "secondary"}>
+                                {s.is_active ? "Active" : "Inactive"}
+                              </Badge>
                             </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={s.online_booking_enabled ? "default" : "secondary"}
+                              >
+                                {s.online_booking_enabled ? "Visible on /book" : "Hidden"}
+                              </Badge>
+                            </TableCell>
+                            {canManage && (
+                              <TableCell className="text-right">
+                                <StaffRowActions
+                                  staffId={s.id}
+                                  name={s.full_name}
+                                  isActive={s.is_active}
+                                  onlineBookingEnabled={s.online_booking_enabled}
+                                />
+                              </TableCell>
+                            )}
                           </TableRow>
                         );
                       })}

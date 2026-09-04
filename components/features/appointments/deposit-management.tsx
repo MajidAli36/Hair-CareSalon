@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState, useCallback, useState } from "react";
+import { useActionState, useCallback, useState, useTransition } from "react";
 import {
   approveAppointmentDeposit,
+  getDepositProofUrl,
   rejectAppointmentDeposit,
 } from "@/lib/actions/appointments";
 import { revertAppointmentDeposit } from "@/lib/actions/deposits";
@@ -23,9 +24,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { ImageIcon, Loader2 } from "lucide-react";
 
 type DepositManagementProps = {
   appointmentId: string;
+  bookingNumber?: string | null;
   deposits: DepositLine[];
   onUpdated?: (
     appointmentId: string,
@@ -36,6 +39,7 @@ type DepositManagementProps = {
 
 export function DepositManagement({
   appointmentId,
+  bookingNumber,
   deposits,
   onUpdated,
 }: DepositManagementProps) {
@@ -43,13 +47,21 @@ export function DepositManagement({
 
   return (
     <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Advance payments
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Advance payments
+        </p>
+        {bookingNumber ? (
+          <p className="font-mono text-xs font-semibold tracking-wide text-foreground">
+            {bookingNumber}
+          </p>
+        ) : null}
+      </div>
       {deposits.map((deposit) => (
         <DepositRow
           key={deposit.id}
           appointmentId={appointmentId}
+          bookingNumber={bookingNumber}
           deposit={deposit}
           onUpdated={onUpdated}
         />
@@ -58,12 +70,49 @@ export function DepositManagement({
   );
 }
 
+function ViewProofButton({ depositId }: { depositId: string }) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <div className="space-y-1">
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={pending}
+        onClick={() => {
+          setError(null);
+          startTransition(async () => {
+            const result = await getDepositProofUrl(depositId);
+            if (result.error || !result.url) {
+              setError(result.error ?? "Could not open screenshot");
+              return;
+            }
+            window.open(result.url, "_blank", "noopener,noreferrer");
+          });
+        }}
+      >
+        {pending ? (
+          <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+        ) : (
+          <ImageIcon className="mr-1.5 size-3.5" />
+        )}
+        View payment screenshot
+      </Button>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
+
 function DepositRow({
   appointmentId,
+  bookingNumber,
   deposit,
   onUpdated,
 }: {
   appointmentId: string;
+  bookingNumber?: string | null;
   deposit: DepositLine;
   onUpdated?: DepositManagementProps["onUpdated"];
 }) {
@@ -76,17 +125,27 @@ function DepositRow({
           <div className="text-sm">
             <span className="font-semibold">{formatCurrency(deposit.amount)}</span>
             <span className="text-muted-foreground"> · awaiting approval</span>
+            {deposit.method && (
+              <span className="text-muted-foreground"> · {deposit.method}</span>
+            )}
           </div>
           <Badge className="bg-amber-600">Pending</Badge>
         </div>
-        {deposit.payment_reference && (
-          <p className="text-xs text-muted-foreground">Ref: {deposit.payment_reference}</p>
-        )}
+        {bookingNumber ? (
+          <p className="font-mono text-xs font-medium">Booking {bookingNumber}</p>
+        ) : null}
         {deposit.notes && <p className="text-xs text-muted-foreground">{deposit.notes}</p>}
+        {deposit.proof_path ? (
+          <ViewProofButton depositId={deposit.id} />
+        ) : deposit.payment_reference ? (
+          <p className="text-xs text-muted-foreground">Ref: {deposit.payment_reference}</p>
+        ) : (
+          <p className="text-xs text-muted-foreground">No screenshot on file</p>
+        )}
         <div className="flex gap-2">
           <ConfirmAction
-            title="Approve advance?"
-            description={`Approve ${formatCurrency(deposit.amount)}? The booking will be confirmed.`}
+            title={bookingNumber ? `Approve ${bookingNumber}?` : "Approve advance?"}
+            description={`Approve ${formatCurrency(deposit.amount)} after reviewing the payment screenshot? The booking will be confirmed.`}
             confirmLabel="Approve"
             pendingLabel="Approving…"
             variant="default"
@@ -98,8 +157,8 @@ function DepositRow({
             Approve
           </ConfirmAction>
           <ConfirmAction
-            title="Reject advance?"
-            description="Reject this advance? The booking will be cancelled."
+            title={bookingNumber ? `Reject ${bookingNumber}?` : "Reject advance?"}
+            description="Reject this payment proof? The booking will be cancelled."
             confirmLabel="Reject"
             pendingLabel="Rejecting…"
             variant="outline"
@@ -118,7 +177,7 @@ function DepositRow({
   if (deposit.status === "APPROVED") {
     return (
       <div className="flex flex-wrap items-start justify-between gap-2 rounded-md border p-2.5 text-sm">
-        <div>
+        <div className="space-y-1">
           <p className="font-semibold text-green-700">
             {formatCurrency(deposit.amount)} approved
           </p>
@@ -127,9 +186,7 @@ function DepositRow({
           ) : (
             <p className="text-xs text-muted-foreground">Held for checkout</p>
           )}
-          {deposit.payment_reference && (
-            <p className="text-xs text-muted-foreground">Ref: {deposit.payment_reference}</p>
-          )}
+          {deposit.proof_path && <ViewProofButton depositId={deposit.id} />}
         </div>
         {!deposit.applied_to_sale_id && (
           <RefundDepositDialog
@@ -166,8 +223,9 @@ function DepositRow({
 
   if (deposit.status === "REJECTED") {
     return (
-      <div className="rounded-md border border-dashed p-2.5 text-sm text-muted-foreground">
+      <div className="space-y-2 rounded-md border border-dashed p-2.5 text-sm text-muted-foreground">
         <span className="line-through">{formatCurrency(deposit.amount)}</span> rejected
+        {deposit.proof_path && <ViewProofButton depositId={deposit.id} />}
       </div>
     );
   }
@@ -246,7 +304,7 @@ function RefundDepositDialog({
             <Input
               id={`refundReference-${depositId}`}
               name="refundReference"
-              placeholder="Transaction ID, receipt #"
+              placeholder="Optional note"
             />
           </div>
           {state.error && <p className="text-sm text-destructive">{state.error}</p>}

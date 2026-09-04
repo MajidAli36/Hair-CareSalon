@@ -53,7 +53,7 @@ export async function getProductSalesBreakdown(
     .from("sales")
     .select("id")
     .eq("organization_id", organizationId)
-    .eq("status", "COMPLETED")
+    .in("status", ["COMPLETED", "AMENDED"])
     .gte("completed_at", start.toISOString())
     .lte("completed_at", end.toISOString());
 
@@ -149,7 +149,7 @@ export async function getRevenueSplit(
     .from("sales")
     .select("id")
     .eq("organization_id", organizationId)
-    .eq("status", "COMPLETED")
+    .in("status", ["COMPLETED", "AMENDED"])
     .gte("completed_at", start.toISOString())
     .lte("completed_at", end.toISOString());
 
@@ -201,7 +201,7 @@ export async function getProductSalesMetrics(
     .from("sales")
     .select("id")
     .eq("organization_id", organizationId)
-    .eq("status", "COMPLETED")
+    .in("status", ["COMPLETED", "AMENDED"])
     .gte("completed_at", start.toISOString())
     .lte("completed_at", end.toISOString());
 

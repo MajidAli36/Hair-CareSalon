@@ -2,19 +2,17 @@ export type ActionResult = {
   error?: string;
   success?: boolean;
   recordDate?: string;
-  /** wa.me URL to open WhatsApp Web/App (fallback when not linked) */
-  waUrl?: string;
-  /** How the outbound message was delivered */
-  sentVia?: "linked" | "wa_me" | "queued";
-  /** 1-based position when queued for linked send */
-  queuePosition?: number;
-  /** Rough wait until this message is expected to send */
-  estimatedWaitSeconds?: number;
 };
 
 export type SaleItemType = "SERVICE" | "PRODUCT" | "PACKAGE";
 export type PaymentMethod = "CASH" | "CARD" | "OTHER";
-export type SaleStatus = "DRAFT" | "COMPLETED" | "VOID";
+export type SaleStatus = "DRAFT" | "COMPLETED" | "AMENDED" | "VOID" | "REFUNDED";
+export type SalePaymentStatus =
+  | "UNPAID"
+  | "PARTIALLY_PAID"
+  | "PAID"
+  | "PARTIALLY_REFUNDED"
+  | "REFUNDED";
 
 export type CartItem = {
   itemType: SaleItemType;
@@ -24,13 +22,29 @@ export type CartItem = {
   quantity: number;
 };
 
+export type CheckoutPaymentLine = {
+  amount: number;
+  method: PaymentMethod;
+};
+
 export type CheckoutPayload = {
   items: CartItem[];
   customerId?: string | null;
   appointmentId?: string | null;
+  /** Stylist who performed the work (staff performance) */
+  staffId?: string | null;
   discount: number;
   /** Optional flat tax amount in PKR — omit or 0 when not applied */
   tax?: number;
+  /** Primary method when using single amountReceived */
   paymentMethod: PaymentMethod;
+  /** Amount collected now (partial allowed for named customers). Defaults to full due. */
+  amountReceived?: number;
+  /** Split tender lines; if set, overrides amountReceived */
+  payments?: CheckoutPaymentLine[];
+  /** Cash tendered (for change); optional */
+  tenderedAmount?: number;
+  /** Explicit unpaid/credit sale — requires manager */
+  allowUnpaid?: boolean;
   notes?: string;
 };

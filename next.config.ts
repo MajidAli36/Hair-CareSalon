@@ -10,7 +10,21 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
-  serverExternalPackages: ["@whiskeysockets/baileys", "pino", "@hapi/boom", "ws"],
+  // Payment screenshots up to 5 MB + multipart overhead
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "6mb",
+    },
+  },
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "images.unsplash.com",
+        pathname: "/**",
+      },
+    ],
+  },
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },

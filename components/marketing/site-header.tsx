@@ -3,44 +3,59 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BRAND } from "@/lib/marketing/brand";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { label: "Home", href: "/" },
   { label: "Services", href: "/#services" },
-  { label: "About", href: "/#about" },
-  { label: "Book", href: "/book" },
+  { label: "The salon", href: "/#salon" },
+  { label: "Visit", href: "/#visit" },
 ];
 
 export function SiteHeader() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const isHome = pathname === "/";
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 24);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  const solid = !isHome || scrolled || open;
 
   return (
-    <header className="sticky top-0 z-50 border-b border-stone-200/80 bg-[#faf8f5]/90 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-        <Link href="/" className="group flex flex-col">
-          <span className="font-serif text-2xl font-semibold tracking-tight text-stone-900 transition-colors group-hover:text-amber-800">
-            {BRAND.name}
-          </span>
-          <span className="text-[10px] font-medium uppercase tracking-[0.25em] text-stone-500">
-            Salon &amp; Spa
-          </span>
+    <header
+      className={cn(
+        "fixed inset-x-0 top-0 z-50 transition-[background-color,border-color,backdrop-filter] duration-300",
+        solid
+          ? "border-b border-[var(--m-line)] bg-[var(--m-paper)]/92 backdrop-blur-md"
+          : "border-b border-transparent bg-transparent"
+      )}
+    >
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6 lg:h-20">
+        <Link
+          href="/"
+          className={cn(
+            "font-display text-xl font-semibold tracking-tight transition-colors sm:text-2xl",
+            solid ? "text-[var(--m-ink)]" : "text-white"
+          )}
+        >
+          {BRAND.name}
         </Link>
 
-        <nav className="hidden items-center gap-8 md:flex">
+        <nav className="hidden items-center gap-10 md:flex">
           {NAV.map((item) => (
             <Link
               key={item.href}
               href={item.href}
               className={cn(
-                "text-sm font-medium transition-colors hover:text-amber-800",
-                pathname === item.href || (item.href === "/book" && pathname.startsWith("/book"))
-                  ? "text-amber-800"
-                  : "text-stone-600"
+                "text-sm font-medium tracking-wide transition-opacity hover:opacity-70",
+                solid ? "text-[var(--m-ink-soft)]" : "text-white/90"
               )}
             >
               {item.label}
@@ -48,25 +63,32 @@ export function SiteHeader() {
           ))}
         </nav>
 
-        <div className="hidden items-center gap-3 md:flex">
-          <Button
-            variant="ghost"
-            className="text-stone-600 hover:text-amber-800"
-            render={<Link href="/login" />}
+        <div className="hidden items-center gap-6 md:flex">
+          <Link
+            href="/login"
+            className={cn(
+              "text-sm font-medium transition-opacity hover:opacity-70",
+              solid ? "text-[var(--m-muted)]" : "text-white/75"
+            )}
           >
-            Staff
-          </Button>
-          <Button
-            className="bg-stone-900 text-white shadow-lg shadow-stone-900/10 hover:bg-amber-900"
-            render={<Link href="/book" />}
+            Login
+          </Link>
+          <Link
+            href="/book"
+            className={cn(
+              "inline-flex h-10 items-center px-5 text-sm font-semibold tracking-wide transition-colors",
+              solid
+                ? "bg-[var(--m-ink)] text-[var(--m-paper)] hover:bg-[var(--m-ink-soft)]"
+                : "bg-white text-[var(--m-ink)] hover:bg-white/90"
+            )}
           >
-            Book appointment
-          </Button>
+            Booking
+          </Link>
         </div>
 
         <button
           type="button"
-          className="rounded-lg p-2 text-stone-700 md:hidden"
+          className={cn("p-2 md:hidden", solid ? "text-[var(--m-ink)]" : "text-white")}
           onClick={() => setOpen(!open)}
           aria-label="Toggle menu"
         >
@@ -75,24 +97,32 @@ export function SiteHeader() {
       </div>
 
       {open && (
-        <div className="border-t border-stone-200 bg-[#faf8f5] px-6 py-4 md:hidden">
-          <nav className="flex flex-col gap-3">
+        <div className="border-t border-[var(--m-line)] bg-[var(--m-paper)] px-6 py-5 md:hidden">
+          <nav className="flex flex-col gap-4">
             {NAV.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
                 onClick={() => setOpen(false)}
-                className="text-sm font-medium text-stone-700"
+                className="text-sm font-medium text-[var(--m-ink)]"
               >
                 {item.label}
               </Link>
             ))}
-            <Link href="/login" onClick={() => setOpen(false)} className="text-sm text-stone-500">
-              Staff login
+            <Link
+              href="/login"
+              onClick={() => setOpen(false)}
+              className="text-sm text-[var(--m-muted)]"
+            >
+              Login
             </Link>
-            <Button className="mt-2 w-full bg-stone-900" render={<Link href="/book" onClick={() => setOpen(false)} />}>
-              Book appointment
-            </Button>
+            <Link
+              href="/book"
+              onClick={() => setOpen(false)}
+              className="inline-flex h-11 items-center justify-center bg-[var(--m-ink)] text-sm font-semibold text-[var(--m-paper)]"
+            >
+              Booking
+            </Link>
           </nav>
         </div>
       )}

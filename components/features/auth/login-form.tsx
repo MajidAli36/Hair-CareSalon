@@ -7,10 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+/** Hardcoded demo login for local / retest — change in production. */
+const DEMO_EMAIL = "owner@salon.com";
+const DEMO_PASSWORD = "Salon123!";
+
 export function LoginForm() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState(DEMO_EMAIL);
+  const [password, setPassword] = useState(DEMO_PASSWORD);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -60,12 +64,13 @@ export function LoginForm() {
           autoComplete="current-password"
         />
       </div>
-      {error && (
-        <p className="text-sm text-destructive">{error}</p>
-      )}
+      {error && <p className="text-sm text-destructive">{error}</p>}
       <Button type="submit" className="w-full" disabled={loading}>
         {loading ? "Signing in…" : "Sign in"}
       </Button>
+      <p className="text-center text-xs text-muted-foreground">
+        Demo: {DEMO_EMAIL} / {DEMO_PASSWORD}
+      </p>
     </form>
   );
 }

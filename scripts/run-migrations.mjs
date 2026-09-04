@@ -1,9 +1,8 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import pg from "pg";
+import { createPgClient } from "./run-sql.mjs";
 
-const { Client } = pg;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
 const migrationsDir = resolve(root, "supabase/migrations");
@@ -164,10 +163,7 @@ async function bootstrapAppliedMigrations(client) {
 }
 
 export async function runIncrementalMigrations(connectionString) {
-  const client = new Client({
-    connectionString,
-    ssl: { rejectUnauthorized: false },
-  });
+  const client = await createPgClient(connectionString);
 
   await client.connect();
   try {

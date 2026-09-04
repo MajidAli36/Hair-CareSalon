@@ -376,30 +376,57 @@ export type Database = {
         Row: {
           id: string; organization_id: string; customer_id: string | null;
           appointment_id: string | null;
-          status: "DRAFT" | "COMPLETED" | "VOID";
+          staff_id: string | null;
+          status: "DRAFT" | "COMPLETED" | "AMENDED" | "VOID" | "REFUNDED";
+          payment_status: "UNPAID" | "PARTIALLY_PAID" | "PAID" | "PARTIALLY_REFUNDED" | "REFUNDED";
           subtotal: number; discount: number; tax: number; total: number;
           deposit_applied: number;
+          amount_paid: number; amount_refunded: number; amount_due: number;
+          payment_version: number;
           notes: string | null;
+          current_version: number;
+          void_reason: string | null;
+          voided_by: string | null;
+          last_amended_at: string | null;
+          last_amended_by: string | null;
           created_by: string | null; completed_at: string | null; voided_at: string | null;
           created_at: string; updated_at: string;
         };
         Insert: {
           id?: string; organization_id: string; customer_id?: string | null;
           appointment_id?: string | null;
-          status?: "DRAFT" | "COMPLETED" | "VOID";
+          staff_id?: string | null;
+          status?: "DRAFT" | "COMPLETED" | "AMENDED" | "VOID" | "REFUNDED";
+          payment_status?: "UNPAID" | "PARTIALLY_PAID" | "PAID" | "PARTIALLY_REFUNDED" | "REFUNDED";
           subtotal?: number; discount?: number; tax?: number; total?: number;
           deposit_applied?: number;
+          amount_paid?: number; amount_refunded?: number; amount_due?: number;
+          payment_version?: number;
           notes?: string | null;
+          current_version?: number;
+          void_reason?: string | null;
+          voided_by?: string | null;
+          last_amended_at?: string | null;
+          last_amended_by?: string | null;
           created_by?: string | null; completed_at?: string | null; voided_at?: string | null;
           created_at?: string; updated_at?: string;
         };
         Update: {
           id?: string; organization_id?: string; customer_id?: string | null;
           appointment_id?: string | null;
-          status?: "DRAFT" | "COMPLETED" | "VOID";
+          staff_id?: string | null;
+          status?: "DRAFT" | "COMPLETED" | "AMENDED" | "VOID" | "REFUNDED";
+          payment_status?: "UNPAID" | "PARTIALLY_PAID" | "PAID" | "PARTIALLY_REFUNDED" | "REFUNDED";
           subtotal?: number; discount?: number; tax?: number; total?: number;
           deposit_applied?: number;
+          amount_paid?: number; amount_refunded?: number; amount_due?: number;
+          payment_version?: number;
           notes?: string | null;
+          current_version?: number;
+          void_reason?: string | null;
+          voided_by?: string | null;
+          last_amended_at?: string | null;
+          last_amended_by?: string | null;
           created_by?: string | null; completed_at?: string | null; voided_at?: string | null;
           created_at?: string; updated_at?: string;
         };
@@ -419,6 +446,68 @@ export type Database = {
         Update: Record<string, never>;
         Relationships: [];
       };
+      sale_versions: {
+        Row: {
+          id: string; organization_id: string; sale_id: string; version_number: number;
+          customer_id: string | null; appointment_id: string | null;
+          subtotal: number; discount: number; tax: number; deposit_applied: number;
+          total: number; payment_total: number; status: string; notes: string | null;
+          change_reason: string | null; changed_by: string | null; changed_at: string;
+        };
+        Insert: {
+          id?: string; organization_id: string; sale_id: string; version_number: number;
+          customer_id?: string | null; appointment_id?: string | null;
+          subtotal?: number; discount?: number; tax?: number; deposit_applied?: number;
+          total?: number; payment_total?: number; status: string; notes?: string | null;
+          change_reason?: string | null; changed_by?: string | null; changed_at?: string;
+        };
+        Update: Record<string, never>;
+        Relationships: [
+          {
+            foreignKeyName: "sale_versions_sale_id_fkey";
+            columns: ["sale_id"];
+            isOneToOne: false;
+            referencedRelation: "sales";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      sale_version_items: {
+        Row: {
+          id: string; organization_id: string; sale_version_id: string;
+          item_type: "SERVICE" | "PRODUCT" | "PACKAGE"; item_id: string; name: string;
+          quantity: number; unit_price: number; line_total: number; created_at: string;
+        };
+        Insert: {
+          id?: string; organization_id: string; sale_version_id: string;
+          item_type: "SERVICE" | "PRODUCT" | "PACKAGE"; item_id: string; name: string;
+          quantity?: number; unit_price: number; line_total: number; created_at?: string;
+        };
+        Update: Record<string, never>;
+        Relationships: [
+          {
+            foreignKeyName: "sale_version_items_sale_version_id_fkey";
+            columns: ["sale_version_id"];
+            isOneToOne: false;
+            referencedRelation: "sale_versions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      sale_refunds: {
+        Row: {
+          id: string; organization_id: string; sale_id: string; amount: number;
+          method: "CASH" | "CARD" | "OTHER"; reason: string; reference: string | null;
+          created_by: string | null; created_at: string;
+        };
+        Insert: {
+          id?: string; organization_id: string; sale_id: string; amount: number;
+          method?: "CASH" | "CARD" | "OTHER"; reason: string; reference?: string | null;
+          created_by?: string | null; created_at?: string;
+        };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
       invoices: {
         Row: { id: string; organization_id: string; sale_id: string; invoice_number: string; issued_at: string; created_at: string };
         Insert: { id?: string; organization_id: string; sale_id: string; invoice_number: string; issued_at?: string; created_at?: string };
@@ -429,11 +518,15 @@ export type Database = {
         Row: {
           id: string; organization_id: string; sale_id: string;
           amount: number; method: "CASH" | "CARD" | "OTHER"; reference: string | null;
+          notes: string | null; created_by: string | null;
+          tendered_amount: number | null; change_given: number | null;
           paid_at: string; created_at: string;
         };
         Insert: {
           id?: string; organization_id: string; sale_id: string;
           amount: number; method?: "CASH" | "CARD" | "OTHER"; reference?: string | null;
+          notes?: string | null; created_by?: string | null;
+          tendered_amount?: number | null; change_given?: number | null;
           paid_at?: string; created_at?: string;
         };
         Update: Record<string, never>;
@@ -449,6 +542,7 @@ export type Database = {
           notes: string | null;
           status: "PENDING" | "APPROVED" | "REJECTED" | "REFUNDED";
           payment_reference: string | null;
+          proof_path: string | null;
           approved_at: string | null;
           approved_by: string | null;
           applied_to_sale_id: string | null;
@@ -691,6 +785,7 @@ export type Database = {
           id: string; organization_id: string; customer_id: string; staff_id: string | null;
           scheduled_at: string; duration_minutes: number;
           status: string; source: string; notes: string | null;
+          booking_number: string | null;
           manual_payment_amount: number | null; manual_payment_method: string | null;
           manual_payment_notes: string | null; manual_payment_at: string | null;
           created_at: string; updated_at: string;
@@ -766,11 +861,12 @@ export type Database = {
     Views: Record<string, never>;
     Functions: {
       next_queue_token_number: { Args: { org_id: string }; Returns: number };
+      next_booking_number: { Args: { org_id: string }; Returns: string };
     };
     Enums: {
       member_role: MemberRole;
       inventory_transaction_type: "IN" | "OUT" | "ADJUSTMENT";
-      sale_status: "DRAFT" | "COMPLETED" | "VOID";
+      sale_status: "DRAFT" | "COMPLETED" | "AMENDED" | "VOID" | "REFUNDED";
       sale_item_type: "SERVICE" | "PRODUCT" | "PACKAGE";
       payment_method: "CASH" | "CARD" | "OTHER";
       whatsapp_direction: "INBOUND" | "OUTBOUND";

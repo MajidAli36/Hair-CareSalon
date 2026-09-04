@@ -6,6 +6,7 @@ export type DepositLine = {
   status?: DepositStatus | string;
   applied_to_sale_id?: string | null;
   payment_reference?: string | null;
+  proof_path?: string | null;
   method?: string;
   notes?: string | null;
   refund_reason?: string | null;

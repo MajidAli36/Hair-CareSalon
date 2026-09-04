@@ -1,6 +1,6 @@
 export const BRAND = {
   name: "Hair & Care Salon",
-  tagline: "Professional salon care",
+  tagline: "Precision hair care",
   /** Primary location line shown on invoices */
   address: "Rasheed Plaza, Link Wapda Town Road, Gujranwala",
   phonePtcl: "055 4284709",

@@ -75,3 +75,40 @@ export async function getDeviceCommands(limit = 20) {
     device: { name: string; type: string } | null;
   }[];
 }
+
+export async function setDeviceActive(
+  deviceId: string,
+  isActive: boolean
+): Promise<ActionResult> {
+  const org = await requireMinimumRole("MANAGER");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("devices")
+    .update({ is_active: isActive })
+    .eq("id", deviceId)
+    .eq("organization_id", org.organizationId);
+  if (error) return { error: error.message };
+  revalidatePath("/devices");
+  return { success: true };
+}
+
+export async function deleteDevice(deviceId: string): Promise<ActionResult> {
+  const org = await requireMinimumRole("MANAGER");
+  const supabase = await createClient();
+
+  await supabase
+    .from("device_commands")
+    .delete()
+    .eq("device_id", deviceId)
+    .eq("organization_id", org.organizationId);
+
+  const { error } = await supabase
+    .from("devices")
+    .delete()
+    .eq("id", deviceId)
+    .eq("organization_id", org.organizationId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/devices");
+  return { success: true };
+}

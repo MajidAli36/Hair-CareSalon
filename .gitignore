@@ -34,6 +34,9 @@ yarn-error.log*
 .env*
 !.env.local.example
 
+# local secrets (service accounts, etc.) — never commit
+.secrets/
+
 # vercel
 .vercel
 
@@ -41,5 +44,3 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# WhatsApp Web session (Baileys auth — never commit)
-.whatsapp-session/

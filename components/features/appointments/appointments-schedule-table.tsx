@@ -16,10 +16,12 @@ import {
   type DepositLine,
 } from "@/lib/booking/pricing";
 import { formatCurrency, formatCustomerName, formatTime } from "@/lib/format";
+import { displayBookingNumber } from "@/lib/booking/booking-number";
 import { CancelOnlineButton } from "@/components/features/online-booking/cancel-online-button";
 
 export type AppointmentRow = {
   id: string;
+  booking_number?: string | null;
   scheduled_at: string;
   status: string;
   source?: string;
@@ -91,6 +93,7 @@ export function AppointmentsScheduleTable({
               mode === "staff" &&
               canCollectAdvance(deposits, serviceTotal, settings) &&
               !["CANCELLED", "COMPLETED", "NO_SHOW"].includes(a.status);
+            const bookingNo = displayBookingNumber(a.booking_number, a.id);
 
             return (
               <div
@@ -100,6 +103,9 @@ export function AppointmentsScheduleTable({
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-sm font-semibold tracking-wide text-primary">
+                        {bookingNo}
+                      </span>
                       <span className="text-lg font-semibold">
                         {formatTime(a.scheduled_at)}
                       </span>
@@ -173,6 +179,7 @@ export function AppointmentsScheduleTable({
                     {deposits.length > 0 && (
                       <DepositManagement
                         appointmentId={a.id}
+                        bookingNumber={bookingNo}
                         deposits={deposits}
                         onUpdated={onDepositResolved}
                       />

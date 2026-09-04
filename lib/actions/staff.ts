@@ -44,31 +44,190 @@ export async function createStaff(
   return { success: true };
 }
 
-export async function recordManualAttendance(staffId: string, action: "in" | "out"): Promise<ActionResult> {
+export async function setStaffActive(
+  staffId: string,
+  isActive: boolean
+): Promise<ActionResult> {
   const org = await requireMinimumRole("MANAGER");
   const supabase = await createClient();
 
-  if (action === "in") {
+  const { error } = await supabase
+    .from("staff")
+    .update(
+      isActive
+        ? { is_active: true }
+        : { is_active: false, online_booking_enabled: false }
+    )
+    .eq("id", staffId)
+    .eq("organization_id", org.organizationId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/staff");
+  revalidatePath("/attendance");
+  revalidatePath("/pos");
+  revalidatePath("/appointments");
+  revalidatePath("/online-booking");
+  return { success: true };
+}
+
+export async function deleteStaff(staffId: string): Promise<ActionResult> {
+  const org = await requireMinimumRole("MANAGER");
+  const supabase = await createClient();
+
+  const { data: staff } = await supabase
+    .from("staff")
+    .select("id, full_name")
+    .eq("id", staffId)
+    .eq("organization_id", org.organizationId)
+    .maybeSingle();
+
+  if (!staff) return { error: "Staff not found" };
+
+  // Clear open attendance so delete is less likely to cascade-block
+  await supabase
+    .from("staff_attendance")
+    .update({ check_out_at: new Date().toISOString() })
+    .eq("staff_id", staffId)
+    .eq("organization_id", org.organizationId)
+    .is("check_out_at", null);
+
+  const { error } = await supabase
+    .from("staff")
+    .delete()
+    .eq("id", staffId)
+    .eq("organization_id", org.organizationId);
+
+  if (error) {
+    if (error.code === "23503" || /foreign key|restrict/i.test(error.message)) {
+      const deactivated = await setStaffActive(staffId, false);
+      if (deactivated.error) return deactivated;
+      return { success: true };
+    }
+    return { error: error.message };
+  }
+
+  revalidatePath("/staff");
+  revalidatePath("/attendance");
+  revalidatePath("/pos");
+  revalidatePath("/appointments");
+  revalidatePath("/online-booking");
+  revalidatePath("/finances");
+  return { success: true };
+}
+
+const MANUAL_BACKDATE_MAX_DAYS = 7;
+const MANUAL_FUTURE_SLACK_MS = 5 * 60 * 1000;
+
+function parseManualAt(value: string | null | undefined, label: string): Date | { error: string } {
+  if (!value?.trim()) return new Date();
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return { error: `Invalid ${label}` };
+  const now = Date.now();
+  if (parsed.getTime() > now + MANUAL_FUTURE_SLACK_MS) {
+    return { error: `${label} cannot be in the future` };
+  }
+  const oldest = now - MANUAL_BACKDATE_MAX_DAYS * 24 * 60 * 60 * 1000;
+  if (parsed.getTime() < oldest) {
+    return { error: `${label} cannot be more than ${MANUAL_BACKDATE_MAX_DAYS} days ago` };
+  }
+  return parsed;
+}
+
+export type ManualAttendanceOptions = {
+  /** Actual check-in or check-out time (ISO / datetime-local). Defaults to now. */
+  at?: string | null;
+  /** For recording a completed past shift during outages */
+  checkInAt?: string | null;
+  checkOutAt?: string | null;
+};
+
+export async function recordManualAttendance(
+  staffId: string,
+  action: "in" | "out" | "session",
+  options: ManualAttendanceOptions = {}
+): Promise<ActionResult> {
+  const org = await requireMinimumRole("MANAGER");
+  const supabase = await createClient();
+
+  const { data: staff } = await supabase
+    .from("staff")
+    .select("id, full_name, is_active")
+    .eq("organization_id", org.organizationId)
+    .eq("id", staffId)
+    .maybeSingle();
+
+  if (!staff) return { error: "Staff not found" };
+  if (!staff.is_active) return { error: "Staff is inactive" };
+
+  const { data: open } = await supabase
+    .from("staff_attendance")
+    .select("id, check_in_at")
+    .eq("staff_id", staffId)
+    .eq("organization_id", org.organizationId)
+    .is("check_out_at", null)
+    .order("check_in_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (action === "session") {
+    if (open) {
+      return { error: `${staff.full_name} is already checked in — check out first` };
+    }
+    const checkIn = parseManualAt(options.checkInAt, "Check-in time");
+    if ("error" in checkIn) return checkIn;
+    const checkOut = parseManualAt(options.checkOutAt, "Check-out time");
+    if ("error" in checkOut) return checkOut;
+    if (checkOut.getTime() <= checkIn.getTime()) {
+      return { error: "Check-out must be after check-in" };
+    }
+    const maxShiftMs = 18 * 60 * 60 * 1000;
+    if (checkOut.getTime() - checkIn.getTime() > maxShiftMs) {
+      return { error: "Shift cannot exceed 18 hours" };
+    }
+
     const { error } = await supabase.from("staff_attendance").insert({
       organization_id: org.organizationId,
       staff_id: staffId,
       method: "MANUAL",
+      check_in_at: checkIn.toISOString(),
+      check_out_at: checkOut.toISOString(),
+      notes: "Backdated manual shift (power/internet recovery)",
+    });
+    if (error) return { error: error.message };
+  } else if (action === "in") {
+    if (open) return { error: `${staff.full_name} is already checked in` };
+    const at = parseManualAt(options.at, "Check-in time");
+    if ("error" in at) return at;
+
+    const { error } = await supabase.from("staff_attendance").insert({
+      organization_id: org.organizationId,
+      staff_id: staffId,
+      method: "MANUAL",
+      check_in_at: at.toISOString(),
+      notes: options.at?.trim()
+        ? "Manual check-in with adjusted time"
+        : null,
     });
     if (error) return { error: error.message };
   } else {
-    const { data: open } = await supabase
-      .from("staff_attendance")
-      .select("id")
-      .eq("staff_id", staffId)
-      .eq("organization_id", org.organizationId)
-      .is("check_out_at", null)
-      .order("check_in_at", { ascending: false })
-      .limit(1)
-      .single();
-    if (!open) return { error: "No open check-in found" };
+    if (!open) return { error: `${staff.full_name} has no open check-in` };
+    const at = parseManualAt(options.at, "Check-out time");
+    if ("error" in at) return at;
+    const openIn = new Date(open.check_in_at).getTime();
+    if (at.getTime() <= openIn) {
+      return { error: "Check-out must be after the current check-in time" };
+    }
+
     const { error } = await supabase
       .from("staff_attendance")
-      .update({ check_out_at: new Date().toISOString() })
+      .update(
+        options.at?.trim()
+          ? {
+              check_out_at: at.toISOString(),
+              notes: "Manual check-out with adjusted time",
+            }
+          : { check_out_at: at.toISOString() }
+      )
       .eq("id", open.id);
     if (error) return { error: error.message };
   }

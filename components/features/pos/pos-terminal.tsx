@@ -6,6 +6,7 @@ import { completeCheckout } from "@/lib/actions/sales";
 import { getCustomerAdvanceAppointments, type PosAppointment } from "@/lib/actions/appointments";
 import { printSaleReceipt } from "@/components/features/sales/print-receipt-button";
 import { ConfirmAction } from "@/components/ui/confirm-action";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -19,13 +20,16 @@ type CatalogService = { id: string; name: string; price: number; duration_minute
 type CatalogProduct = { id: string; name: string; retail_price: number; stock_quantity: number };
 type CatalogPackage = { id: string; name: string; price: number };
 type CatalogCustomer = { id: string; first_name: string; last_name: string | null; phone: string | null };
+type CatalogStaff = { id: string; full_name: string };
 
 type PosTerminalProps = {
   services: CatalogService[];
   products: CatalogProduct[];
   packages: CatalogPackage[];
   customers: CatalogCustomer[];
+  staff: CatalogStaff[];
   appointments: PosAppointment[];
+  canManage?: boolean;
 };
 
 function formatApptLabel(a: PosAppointment) {
@@ -37,16 +41,29 @@ function formatApptLabel(a: PosAppointment) {
   return `${day} — ${a.customerName}${advance}`;
 }
 
-export function PosTerminal({ services, products, packages, customers, appointments }: PosTerminalProps) {
+export function PosTerminal({
+  services,
+  products,
+  packages,
+  customers,
+  staff,
+  appointments,
+  canManage = false,
+}: PosTerminalProps) {
   const router = useRouter();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customerId, setCustomerId] = useState("");
   const [appointmentId, setAppointmentId] = useState("");
+  const [staffId, setStaffId] = useState("");
   const [depositCredit, setDepositCredit] = useState(0);
   const [discount, setDiscount] = useState(0);
   const [tax, setTax] = useState("");
   const [applyTax, setApplyTax] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CASH");
+  const [amountReceived, setAmountReceived] = useState<string>("");
+  const [tenderedAmount, setTenderedAmount] = useState<string>("");
+  const [confirmPartial, setConfirmPartial] = useState(false);
+  const [allowUnpaid, setAllowUnpaid] = useState(false);
   const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [customerLookupPending, startCustomerLookup] = useTransition();
@@ -67,11 +84,25 @@ export function PosTerminal({ services, products, packages, customers, appointme
   const total = Math.max(0, subtotal - discountAmount + taxAmount);
   const appliedDeposit = Math.min(depositCredit, total);
   const amountDue = Math.max(0, total - appliedDeposit);
+  const receivedNow =
+    amountReceived === ""
+      ? amountDue
+      : Math.max(0, Number(amountReceived) || 0);
+  const remainingDue = Math.max(0, Math.round((amountDue - receivedNow) * 100) / 100);
+  const tendered =
+    tenderedAmount === ""
+      ? receivedNow
+      : Math.max(0, Number(tenderedAmount) || 0);
+  const changeGiven = Math.max(0, Math.round((tendered - receivedNow) * 100) / 100);
+  const isWalkIn = !customerId;
+  const isPartial = remainingDue > 0.009;
+  const isUnpaid = receivedNow <= 0 && amountDue > 0;
 
   function applyAppointment(appt: PosAppointment, loadServices = true) {
     setAppointmentId(appt.id);
     setCustomerId(appt.customerId);
     setDepositCredit(appt.depositBalance);
+    if (appt.staffId) setStaffId(appt.staffId);
     if (loadServices && appt.services.length > 0) {
       setCart(
         appt.services.map((s) => ({
@@ -182,13 +213,29 @@ export function PosTerminal({ services, products, packages, customers, appointme
       setError("Select the appointment linked to this advance before completing sale.");
       return;
     }
+    if (isWalkIn && isPartial) {
+      setError("Walk-in customers must pay the full amount.");
+      return;
+    }
+    if (isPartial && !confirmPartial) {
+      setError("Confirm that the remaining balance will be customer due.");
+      return;
+    }
+    if (isUnpaid && (!allowUnpaid || !canManage)) {
+      setError("Creating an unpaid invoice requires a manager.");
+      return;
+    }
     const result = await completeCheckout({
       items: cart,
       customerId: customerId || null,
       appointmentId: appointmentId || null,
+      staffId: staffId || null,
       discount: discountAmount,
       tax: taxAmount > 0 ? taxAmount : undefined,
       paymentMethod,
+      amountReceived: receivedNow,
+      tenderedAmount: tendered,
+      allowUnpaid: allowUnpaid && canManage,
     });
     if (result.error) {
       setError(result.error);
@@ -203,11 +250,14 @@ export function PosTerminal({ services, products, packages, customers, appointme
 
   const checkoutLabel =
     appliedDeposit > 0
-      ? `Complete sale · collect ${formatCurrency(amountDue)}`
-      : "Complete sale";
+      ? `Complete sale · collect ${formatCurrency(receivedNow)}`
+      : isPartial
+        ? `Complete · due ${formatCurrency(remainingDue)}`
+        : "Complete sale";
 
-  const checkoutDescription =
-    amountDue > 0
+  const checkoutDescription = isPartial
+    ? `Invoice ${formatCurrency(total)}. Collecting ${formatCurrency(receivedNow)} now. Customer will have ${formatCurrency(remainingDue)} outstanding.`
+    : amountDue > 0
       ? `Confirm this sale for ${formatCurrency(amountDue)} via ${paymentMethod}? A receipt will print after completion.`
       : `Confirm this sale? Advance covers the full amount. A receipt will print after completion.`;
 
@@ -384,6 +434,26 @@ export function PosTerminal({ services, products, packages, customers, appointme
           )}
         </div>
 
+        <div className="space-y-2">
+          <Label htmlFor="served-by">Served by</Label>
+          <select
+            id="served-by"
+            value={staffId}
+            onChange={(e) => setStaffId(e.target.value)}
+            className="flex h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm"
+          >
+            <option value="">Unassigned</option>
+            {staff.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.full_name}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-muted-foreground">
+            Counts toward staff performance. Auto-fills from the linked appointment.
+          </p>
+        </div>
+
         {cart.length === 0 ? (
           <p className="text-sm text-muted-foreground">Add items to begin checkout.</p>
         ) : (
@@ -547,6 +617,119 @@ export function PosTerminal({ services, products, packages, customers, appointme
           )}
         </div>
 
+        {amountDue > 0 ? (
+          <div className="space-y-3 rounded-lg border-2 border-primary/30 bg-primary/5 p-3">
+            <p className="text-sm font-semibold">Payment now</p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={!isPartial ? "default" : "outline"}
+                onClick={() => {
+                  setAmountReceived(String(amountDue));
+                  setTenderedAmount(String(amountDue));
+                  setConfirmPartial(false);
+                  setAllowUnpaid(false);
+                }}
+              >
+                Pay full ({formatCurrency(amountDue)})
+              </Button>
+              {!isWalkIn ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={isPartial ? "default" : "outline"}
+                  onClick={() => {
+                    const half = Math.round((amountDue / 2) * 100) / 100;
+                    setAmountReceived(String(half));
+                    setTenderedAmount(String(half));
+                  }}
+                >
+                  Partial payment
+                </Button>
+              ) : (
+                <p className="text-xs text-muted-foreground self-center">
+                  Walk-in must pay full amount
+                </p>
+              )}
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="amount-received">Amount customer is paying now (Rs)</Label>
+              <Input
+                id="amount-received"
+                type="number"
+                min={0}
+                step={1}
+                value={amountReceived === "" ? amountDue : amountReceived}
+                onChange={(e) => {
+                  setAmountReceived(e.target.value);
+                  setTenderedAmount(e.target.value);
+                }}
+              />
+            </div>
+            {paymentMethod === "CASH" ? (
+              <div className="space-y-1">
+                <Label htmlFor="tendered">Cash tendered (optional)</Label>
+                <Input
+                  id="tendered"
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={tenderedAmount === "" ? receivedNow : tenderedAmount}
+                  onChange={(e) => setTenderedAmount(e.target.value)}
+                />
+                {changeGiven > 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Change to return: {formatCurrency(changeGiven)}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+            <div className="flex justify-between rounded-md bg-background px-2 py-1.5 text-sm">
+              <span className="text-muted-foreground">Remaining due (customer owes)</span>
+              <span className={remainingDue > 0 ? "font-semibold text-amber-700 dark:text-amber-400" : "font-semibold"}>
+                {formatCurrency(remainingDue)}
+              </span>
+            </div>
+            {isPartial && !isWalkIn ? (
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={confirmPartial}
+                  onChange={(e) => setConfirmPartial(e.target.checked)}
+                />
+                <span>
+                  I confirm {formatCurrency(remainingDue)} will stay as customer due for{" "}
+                  {customers.find((c) => c.id === customerId)
+                    ? formatCustomerName(
+                        customers.find((c) => c.id === customerId)!.first_name,
+                        customers.find((c) => c.id === customerId)!.last_name
+                      )
+                    : "this customer"}
+                  .
+                </span>
+              </label>
+            ) : null}
+            {isUnpaid && canManage && !isWalkIn ? (
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={allowUnpaid}
+                  onChange={(e) => setAllowUnpaid(e.target.checked)}
+                />
+                <span>Create as unpaid invoice (manager approval)</span>
+              </label>
+            ) : null}
+            {isWalkIn && isPartial ? (
+              <p className="text-xs text-destructive">
+                Walk-in must pay in full. Keep Majid Ali (or another customer) selected to leave a due.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
         {error && <p className="text-sm text-destructive">{error}</p>}
 
         <ConfirmAction
@@ -557,7 +740,7 @@ export function PosTerminal({ services, products, packages, customers, appointme
           variant="default"
           size="default"
           className="w-full"
-          disabled={cart.length === 0}
+          disabled={cart.length === 0 || (isPartial && !isWalkIn && !confirmPartial)}
           onConfirm={runCheckout}
         >
           {checkoutLabel}

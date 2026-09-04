@@ -55,70 +55,91 @@ export function StaffScheduleForm({ staff, schedules = [] }: StaffScheduleFormPr
           and online bookings — shared calendar, no double booking.
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <form action={formAction} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <div className="space-y-2">
-            <Label htmlFor="schedule-staff">Staff</Label>
-            <select
-              id="schedule-staff"
-              name="staff_id"
-              required
-              value={staffId}
-              onChange={(e) => setStaffId(e.target.value)}
-              className="flex h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm"
-            >
-              {staff.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.full_name}
-                </option>
-              ))}
-            </select>
+      <CardContent className="space-y-3">
+        <form action={formAction} className="space-y-3">
+          <div className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,0.9fr)_auto]">
+            <div className="space-y-1.5">
+              <Label htmlFor="schedule-staff" className="block h-5 leading-5">
+                Staff
+              </Label>
+              <select
+                id="schedule-staff"
+                name="staff_id"
+                required
+                value={staffId}
+                onChange={(e) => setStaffId(e.target.value)}
+                className="flex h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm"
+              >
+                {staff.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.full_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="schedule-date" className="block h-5 leading-5">
+                Date
+              </Label>
+              <Input
+                id="schedule-date"
+                type="date"
+                required
+                value={scheduleDate}
+                className="h-9"
+                onChange={(e) => setScheduleDate(e.target.value)}
+              />
+              <input type="hidden" name="day_of_week" value={dayOfWeek} />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="schedule-opens" className="block h-5 leading-5">
+                Opens
+              </Label>
+              <Input
+                key={`start-${timeFieldKey}`}
+                id="schedule-opens"
+                name="start_time"
+                type="time"
+                required
+                defaultValue={startTime}
+                className="h-9"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="schedule-closes" className="block h-5 leading-5">
+                Closes
+              </Label>
+              <Input
+                key={`end-${timeFieldKey}`}
+                id="schedule-closes"
+                name="end_time"
+                type="time"
+                required
+                defaultValue={endTime}
+                className="h-9"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <span className="block h-5 leading-5 select-none opacity-0" aria-hidden>
+                Save
+              </span>
+              <Button type="submit" disabled={pending} className="h-9 w-full lg:w-auto lg:min-w-[7.5rem]">
+                {pending ? "Saving…" : "Save hours"}
+              </Button>
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="schedule-date">Date</Label>
-            <Input
-              id="schedule-date"
-              type="date"
-              required
-              value={scheduleDate}
-              className="h-8"
-              onChange={(e) => setScheduleDate(e.target.value)}
-            />
-            <input type="hidden" name="day_of_week" value={dayOfWeek} />
-            <p className="text-xs text-muted-foreground">
-              Recurring every {DAY_NAMES[dayOfWeek]}
-              {existingSchedule ? " · saved hours loaded" : ""}
-            </p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="schedule-opens">Opens</Label>
-            <Input
-              key={`start-${timeFieldKey}`}
-              id="schedule-opens"
-              name="start_time"
-              type="time"
-              required
-              defaultValue={startTime}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="schedule-closes">Closes</Label>
-            <Input
-              key={`end-${timeFieldKey}`}
-              id="schedule-closes"
-              name="end_time"
-              type="time"
-              required
-              defaultValue={endTime}
-            />
-          </div>
-          <div className="flex items-end">
-            <Button type="submit" disabled={pending} className="w-full">
-              {pending ? "Saving…" : "Save hours"}
-            </Button>
-          </div>
-          {state.error && <p className="sm:col-span-2 text-sm text-destructive">{state.error}</p>}
-          {state.success && <p className="sm:col-span-2 text-sm text-green-600">Schedule saved.</p>}
+
+          <p className="text-xs text-muted-foreground">
+            Recurring every {DAY_NAMES[dayOfWeek]}
+            {existingSchedule ? " · saved hours loaded" : ""}
+          </p>
+
+          {state.error && <p className="text-sm text-destructive">{state.error}</p>}
+          {state.success && <p className="text-sm text-green-600">Schedule saved.</p>}
         </form>
       </CardContent>
     </Card>

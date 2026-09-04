@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useTransition } from "react";
+import { useMemo, useTransition } from "react";
 import { AttendanceButtons } from "@/components/features/staff/staff-forms";
+import { ManualAttendancePanel } from "@/components/features/attendance/manual-attendance-panel";
 import { ThumbEnrollmentPanel } from "@/components/features/attendance/thumb-enrollment-panel";
 import type { AttendanceOverview, AttendanceReport } from "@/lib/actions/attendance";
 import { attendanceMethodLabel } from "@/lib/attendance/labels";
@@ -93,6 +94,14 @@ export function AttendanceDashboard({
   }
 
   const thumbScans = report.records.filter((r) => r.method === "BIOMETRIC").length;
+  const onDutyIds = useMemo(
+    () => new Set(overview.onDuty.map((s) => s.staffId)),
+    [overview.onDuty]
+  );
+  const activeStaff = useMemo(
+    () => staffList.map((s) => ({ id: s.id, full_name: s.full_name })),
+    [staffList]
+  );
 
   return (
     <div className="space-y-6">
@@ -106,7 +115,7 @@ export function AttendanceDashboard({
             <CardDescription>
               Primary check-in method — staff scan their thumb on the biometric terminal at the
               salon entrance. {overview.enrolledCount} of {overview.activeStaffCount} stylists
-              enrolled.
+              enrolled. Use manual check-in below when needed.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
@@ -123,28 +132,36 @@ export function AttendanceDashboard({
           </CardContent>
         </Card>
 
-        {overview.onDuty.length > 0 && (
-          <Card className="min-w-[240px]">
-            <CardHeader className="pb-2">
-              <CardDescription>On duty now</CardDescription>
-              <CardTitle className="text-2xl">{overview.onDuty.length}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {overview.onDuty.slice(0, 5).map((s) => (
-                <div key={s.staffId} className="flex items-center justify-between text-sm">
-                  <span className="font-medium">{s.staffName}</span>
-                  <MethodBadge method={s.method} />
-                </div>
-              ))}
-              {overview.onDuty.length > 5 && (
-                <p className="text-xs text-muted-foreground">
-                  +{overview.onDuty.length - 5} more
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        )}
+        <Card className="min-w-[240px]">
+          <CardHeader className="pb-2">
+            <CardDescription>On duty now</CardDescription>
+            <CardTitle className="text-2xl">{overview.onDuty.length}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {overview.onDuty.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nobody checked in yet.</p>
+            ) : (
+              <>
+                {overview.onDuty.slice(0, 5).map((s) => (
+                  <div key={s.staffId} className="flex items-center justify-between text-sm">
+                    <span className="font-medium">{s.staffName}</span>
+                    <MethodBadge method={s.method} />
+                  </div>
+                ))}
+                {overview.onDuty.length > 5 && (
+                  <p className="text-xs text-muted-foreground">
+                    +{overview.onDuty.length - 5} more
+                  </p>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
       </div>
+
+      {canManage && (
+        <ManualAttendancePanel staff={activeStaff} onDuty={overview.onDuty} />
+      )}
 
       {canManage && (
         <ThumbEnrollmentPanel
@@ -314,7 +331,10 @@ export function AttendanceDashboard({
                       </TableCell>
                       {canManage && a.staff && (
                         <TableCell>
-                          <AttendanceButtons staffId={a.staff.id} />
+                          <AttendanceButtons
+                            staffId={a.staff.id}
+                            onDuty={!a.check_out_at || onDutyIds.has(a.staff.id)}
+                          />
                         </TableCell>
                       )}
                     </TableRow>

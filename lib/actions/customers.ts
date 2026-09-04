@@ -184,15 +184,11 @@ export type CustomerHistory = {
     total: number;
     status: string;
     completed_at: string | null;
+    amount_paid?: number;
+    amount_due?: number;
+    payment_status?: string;
     invoice: { invoice_number: string } | { invoice_number: string }[] | null;
     items: { name: string; quantity: number; line_total: number }[];
-  }[];
-  messages: {
-    id: string;
-    direction: string;
-    body: string;
-    status: string;
-    created_at: string;
   }[];
   stats: {
     totalSpent: number;
@@ -208,7 +204,7 @@ export async function getCustomerHistory(customerId: string): Promise<CustomerHi
   const customer = await getCustomer(customerId);
   if (!customer) return null;
 
-  const [appointments, sales, messages] = await Promise.all([
+  const [appointments, sales] = await Promise.all([
     supabase
       .from("appointments")
       .select(`
@@ -224,7 +220,7 @@ export async function getCustomerHistory(customerId: string): Promise<CustomerHi
     supabase
       .from("sales")
       .select(`
-        id, total, status, completed_at,
+        id, total, status, completed_at, amount_paid, amount_due, payment_status,
         invoice:invoices(invoice_number),
         items:sale_items(name, quantity, line_total)
       `)
@@ -233,23 +229,16 @@ export async function getCustomerHistory(customerId: string): Promise<CustomerHi
       .order("created_at", { ascending: false })
       .limit(50)
       .then(({ data }) => data ?? []),
-    supabase
-      .from("whatsapp_messages")
-      .select("id, direction, body, status, created_at")
-      .eq("organization_id", org.organizationId)
-      .eq("customer_id", customerId)
-      .order("created_at", { ascending: false })
-      .limit(50)
-      .then(({ data }) => data ?? []),
   ]);
 
-  const completedSales = sales.filter((s) => s.status === "COMPLETED");
+  const completedSales = sales.filter(
+    (s) => s.status === "COMPLETED" || s.status === "AMENDED"
+  );
   const totalSpent = completedSales.reduce((sum, s) => sum + Number(s.total), 0);
 
   return {
     appointments: appointments as unknown as CustomerHistory["appointments"],
     sales: sales as unknown as CustomerHistory["sales"],
-    messages: messages as CustomerHistory["messages"],
     stats: {
       totalSpent,
       visitCount: completedSales.length,

@@ -191,7 +191,7 @@ export function QueueBoard({
           disabled={drawerPending}
           onClick={() =>
             startDrawer(async () => {
-              await openDrawer();
+              await openDrawer("queue");
             })
           }
         >

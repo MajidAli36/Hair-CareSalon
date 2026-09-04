@@ -51,6 +51,8 @@ export async function createCategory(
 
   if (error) return { error: error.message };
   revalidatePath("/services");
+  revalidatePath("/");
+  revalidatePath("/book");
   return { success: true };
 }
 
@@ -66,6 +68,8 @@ export async function deleteCategory(id: string): Promise<ActionResult> {
 
   if (error) return { error: error.message };
   revalidatePath("/services");
+  revalidatePath("/");
+  revalidatePath("/book");
   return { success: true };
 }
 
@@ -102,6 +106,8 @@ export async function createService(
 
   if (error) return { error: error.message };
   revalidatePath("/services");
+  revalidatePath("/");
+  revalidatePath("/book");
   return { success: true };
 }
 
@@ -142,6 +148,8 @@ export async function updateService(
 
   if (error) return { error: error.message };
   revalidatePath("/services");
+  revalidatePath("/");
+  revalidatePath("/book");
   return { success: true };
 }
 
@@ -157,6 +165,8 @@ export async function deleteService(id: string): Promise<ActionResult> {
 
   if (error) return { error: error.message };
   revalidatePath("/services");
+  revalidatePath("/");
+  revalidatePath("/book");
   return { success: true };
 }
 
@@ -210,6 +220,8 @@ export async function createPackage(
   }
 
   revalidatePath("/services");
+  revalidatePath("/");
+  revalidatePath("/book");
   return { success: true };
 }
 
@@ -225,6 +237,8 @@ export async function deletePackage(id: string): Promise<ActionResult> {
 
   if (error) return { error: error.message };
   revalidatePath("/services");
+  revalidatePath("/");
+  revalidatePath("/book");
   return { success: true };
 }
 

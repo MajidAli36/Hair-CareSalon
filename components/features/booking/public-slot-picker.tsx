@@ -26,29 +26,69 @@ export function PublicSlotPicker({
   const serviceKey = serviceIds.join(",");
   const [slots, setSlots] = useState<BookableSlot[]>([]);
   const [selected, setSelected] = useState("");
+  const [loaded, setLoaded] = useState(false);
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
-    if (!canFetch) return;
+    if (!canFetch) {
+      setSlots([]);
+      setSelected("");
+      setLoaded(false);
+      onSlotChange?.(null);
+      return;
+    }
+
+    let cancelled = false;
+    setLoaded(false);
     startTransition(async () => {
       const result = await getPublicAvailableSlots(orgSlug, date, staffId, serviceIds);
+      if (cancelled) return;
       setSlots(result);
       setSelected("");
+      setLoaded(true);
       onSlotChange?.(null);
     });
-  }, [orgSlug, date, staffId, serviceKey, canFetch, onSlotChange, serviceIds]);
+
+    return () => {
+      cancelled = true;
+    };
+    // serviceKey covers serviceIds; onSlotChange is optional and often unstable
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional stable deps
+  }, [orgSlug, date, staffId, serviceKey, canFetch]);
 
   const visibleSlots = canFetch ? slots : [];
+  const showEmpty =
+    canFetch && loaded && !pending && visibleSlots.length === 0;
+
+  let hint: string | null = null;
+  if (!staffId) {
+    hint = "Select a stylist first.";
+  } else if (!date) {
+    hint = "Choose a date to see available times.";
+  } else if (pending || !loaded) {
+    hint = null;
+  } else if (showEmpty) {
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, "0");
+    const d = String(today.getDate()).padStart(2, "0");
+    const isToday = date === `${y}-${m}-${d}`;
+    hint = isToday
+      ? "No more times left today. Pick tomorrow or another day."
+      : "No open times for this date. Try another day, or ask the salon to set this stylist’s hours.";
+  }
 
   return (
     <div className="space-y-2">
-      <Label htmlFor="slot" className="text-stone-700">Time slot *</Label>
+      <Label htmlFor="slot" className="text-stone-700">
+        Time slot *
+      </Label>
       <select
         id="slot"
         name="slot_select"
         required
         value={selected}
-        disabled={pending || !staffId || visibleSlots.length === 0}
+        disabled={pending || !canFetch || visibleSlots.length === 0}
         onChange={(e) => {
           setSelected(e.target.value);
           onSlotChange?.(visibleSlots.find((s) => s.iso === e.target.value) ?? null);
@@ -58,7 +98,9 @@ export function PublicSlotPicker({
           "flex h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm"
         }
       >
-        <option value="">{pending ? "Loading…" : "Select time…"}</option>
+        <option value="">
+          {pending || (canFetch && !loaded) ? "Loading…" : "Select time…"}
+        </option>
         {visibleSlots.map((s) => (
           <option key={s.iso} value={s.iso}>
             {s.label}
@@ -66,9 +108,7 @@ export function PublicSlotPicker({
         ))}
       </select>
       <input type="hidden" name="scheduled_at" value={selected} />
-      {!pending && staffId && visibleSlots.length === 0 && (
-        <p className="text-xs text-muted-foreground">No slots available. Another customer may have booked this time.</p>
-      )}
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
 }

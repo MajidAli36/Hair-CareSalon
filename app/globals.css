@@ -143,4 +143,84 @@
   .marketing-site .font-serif {
     font-family: var(--font-serif), ui-serif, Georgia, "Times New Roman", serif;
   }
+
+  .marketing-site {
+    --m-ink: #0c1f1c;
+    --m-ink-soft: #1a332e;
+    --m-mist: #eef1ef;
+    --m-paper: #f6f7f5;
+    --m-line: rgba(12, 31, 28, 0.12);
+    --m-muted: #5c6b66;
+    --m-accent: #3d6b5f;
+    --m-accent-soft: #c5d4ce;
+    background: var(--m-paper);
+    color: var(--m-ink);
+    font-family: var(--font-marketing-sans), ui-sans-serif, system-ui, sans-serif;
+  }
+
+  .marketing-site .font-display {
+    font-family: var(--font-marketing-display), ui-serif, Georgia, serif;
+  }
+
+  @keyframes m-fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(18px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes m-ken {
+    from {
+      transform: scale(1.06);
+    }
+    to {
+      transform: scale(1);
+    }
+  }
+
+  @keyframes m-line-draw {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+
+  .m-fade-up {
+    animation: m-fade-up 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .m-fade-up-delay-1 {
+    animation-delay: 0.12s;
+  }
+
+  .m-fade-up-delay-2 {
+    animation-delay: 0.24s;
+  }
+
+  .m-fade-up-delay-3 {
+    animation-delay: 0.36s;
+  }
+
+  .m-ken {
+    animation: m-ken 12s ease-out both;
+  }
+
+  .m-rule {
+    transform-origin: left;
+    animation: m-line-draw 1s cubic-bezier(0.22, 1, 0.36, 1) 0.4s both;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .m-fade-up,
+    .m-ken,
+    .m-rule {
+      animation: none;
+    }
+  }
 }

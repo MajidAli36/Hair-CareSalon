@@ -12,6 +12,7 @@ import {
   type TokenReceiptInput,
 } from "@/lib/print/thermal-html";
 import { getSale } from "@/lib/actions/sales";
+import { displayBookingNumber } from "@/lib/booking/booking-number";
 import { formatCustomerName, formatDate, formatTime } from "@/lib/format";
 
 async function getBusinessInfo() {
@@ -35,7 +36,7 @@ function nowParts() {
 export async function getSaleReceiptHtml(saleId: string): Promise<string | null> {
   await requireOrganization();
   const sale = await getSale(saleId);
-  if (!sale || sale.status !== "COMPLETED") return null;
+  if (!sale || (sale.status !== "COMPLETED" && sale.status !== "AMENDED")) return null;
 
   const business = await getBusinessInfo();
   const customer = sale.customer as {
@@ -56,6 +57,15 @@ export async function getSaleReceiptHtml(saleId: string): Promise<string | null>
   const invoiceData = Array.isArray(invoice) ? invoice[0] : invoice;
   const payments = (sale.payments ?? []) as { method: string; amount: number }[];
   const completedAt = sale.completed_at ? new Date(sale.completed_at) : new Date();
+  const saleAny = sale as { amount_paid?: number; amount_due?: number; amount_refunded?: number };
+  const amountPaid =
+    saleAny.amount_paid != null
+      ? Number(saleAny.amount_paid)
+      : payments.reduce((s, p) => s + Number(p.amount), 0);
+  const amountDue =
+    saleAny.amount_due != null
+      ? Number(saleAny.amount_due)
+      : Math.max(0, Number(sale.total) - amountPaid + Number(saleAny.amount_refunded ?? 0));
 
   const data: SaleReceiptInput = {
     business,
@@ -78,7 +88,8 @@ export async function getSaleReceiptHtml(saleId: string): Promise<string | null>
     depositApplied: Number(sale.deposit_applied ?? 0),
     total: Number(sale.total),
     paymentMethod: payments[0]?.method ?? "CASH",
-    amountPaid: payments.reduce((s, p) => s + Number(p.amount), 0),
+    amountPaid,
+    amountDue,
   };
 
   return renderSaleReceiptHtml(data);
@@ -128,7 +139,7 @@ export async function getAppointmentReceiptHtml(
 
   const { data: appt } = await supabase
     .from("appointments")
-    .select("scheduled_at, status, source, customer_id, staff_id")
+    .select("id, scheduled_at, status, source, customer_id, staff_id, booking_number")
     .eq("id", appointmentId)
     .eq("organization_id", org.organizationId)
     .single();
@@ -163,6 +174,10 @@ export async function getAppointmentReceiptHtml(
 
   const data: AppointmentReceiptInput = {
     business,
+    bookingNumber: displayBookingNumber(
+      (appt as { booking_number?: string | null }).booking_number,
+      appt.id
+    ),
     customerName: customer
       ? formatCustomerName(customer.first_name, customer.last_name)
       : "Customer",

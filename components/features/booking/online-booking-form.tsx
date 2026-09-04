@@ -1,20 +1,26 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
-import { CheckCircle2, Loader2, Printer } from "lucide-react";
+import { CheckCircle2, Loader2, MessageCircle, Printer } from "lucide-react";
 import { createOnlineBooking } from "@/lib/actions/appointments";
 import { AppointmentOrderSummary } from "@/components/features/appointments/appointment-order-summary";
 import { PublicSlotPicker } from "@/components/features/booking/public-slot-picker";
+import {
+  BookingDateField,
+  defaultBookingDate,
+} from "@/components/features/booking/booking-date-field";
 import { calculateRequiredAdvance } from "@/lib/booking/pricing";
 import { renderAppointmentReceiptHtml } from "@/lib/print/thermal-html";
 import { printThermalHtml } from "@/lib/print/browser";
 import { BRAND } from "@/lib/marketing/brand";
+import { getOnlineBookingSalonWhatsAppUrl } from "@/lib/whatsapp/booking-notify";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { formatCurrency } from "@/lib/format";
+import { getLocalDateString } from "@/lib/dates/local";
+import { formatCurrency, formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 type Service = { id: string; name: string; price: number; duration_minutes: number };
@@ -48,6 +54,7 @@ export function OnlineBookingForm({
   const [pendingApproval, setPendingApproval] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastBooking, setLastBooking] = useState<{
+    bookingNumber: string;
     customerName: string;
     customerPhone: string;
     staffName: string;
@@ -56,14 +63,23 @@ export function OnlineBookingForm({
     advanceAmount?: number;
   } | null>(null);
   const [date, setDate] = useState("");
+  const [minDateStr, setMinDateStr] = useState("");
+  const [maxDateStr, setMaxDateStr] = useState("");
   const [staffId, setStaffId] = useState("");
   const [serviceIds, setServiceIds] = useState<string[]>([]);
+  const [proofFileError, setProofFileError] = useState<string | null>(null);
 
   const isMarketing = variant === "marketing";
-  const maxDate = new Date();
-  maxDate.setDate(maxDate.getDate() + daysAhead);
-  const maxDateStr = maxDate.toISOString().slice(0, 10);
-  const minDateStr = new Date().toISOString().slice(0, 10);
+  const MAX_PROOF_BYTES = 5 * 1024 * 1024;
+
+  useEffect(() => {
+    const min = getLocalDateString();
+    const maxAnchor = new Date();
+    maxAnchor.setDate(maxAnchor.getDate() + daysAhead);
+    setMinDateStr(min);
+    setMaxDateStr(getLocalDateString(maxAnchor));
+    setDate(defaultBookingDate());
+  }, [daysAhead]);
 
   const selectedServices = services.filter((s) => serviceIds.includes(s.id));
   const requiredAdvance = advanceSettings
@@ -85,24 +101,46 @@ export function OnlineBookingForm({
     setError(null);
     const fd = new FormData(e.currentTarget);
 
+    const proof = fd.get("payment_proof");
+    if (requiredAdvance > 0) {
+      if (!(proof instanceof File) || proof.size === 0) {
+        setProofFileError("Please upload a payment screenshot (max 5 MB).");
+        setError("Please upload a payment screenshot (max 5 MB).");
+        return;
+      }
+      if (proof.size > MAX_PROOF_BYTES) {
+        setProofFileError("Image must be 5 MB or smaller. Please choose a smaller file.");
+        setError("Image must be 5 MB or smaller. Please choose a smaller file.");
+        return;
+      }
+    }
+    setProofFileError(null);
+
     startTransition(async () => {
-      const result = await createOnlineBooking({
-        orgSlug,
-        firstName: fd.get("first_name") as string,
-        lastName: (fd.get("last_name") as string) || undefined,
-        phone: fd.get("phone") as string,
-        email: (fd.get("email") as string) || undefined,
-        staffId: fd.get("staff_id") as string,
-        scheduledAt: fd.get("scheduled_at") as string,
-        serviceIds,
-        notes: (fd.get("notes") as string) || undefined,
-        advanceAmount: requiredAdvance > 0 ? Number(fd.get("advance_amount") ?? requiredAdvance) : undefined,
-        advanceMethod: (fd.get("advance_method") as "CASH" | "CARD" | "OTHER") || "OTHER",
-        paymentReference: (fd.get("payment_reference") as string) || undefined,
-        advanceNotes: (fd.get("advance_notes") as string) || undefined,
-      });
-      if (result.error) setError(result.error);
-      else {
+      try {
+        const result = await createOnlineBooking({
+          orgSlug,
+          firstName: fd.get("first_name") as string,
+          lastName: (fd.get("last_name") as string) || undefined,
+          phone: fd.get("phone") as string,
+          email: (fd.get("email") as string) || undefined,
+          staffId: fd.get("staff_id") as string,
+          scheduledAt: fd.get("scheduled_at") as string,
+          serviceIds,
+          notes: (fd.get("notes") as string) || undefined,
+          advanceAmount: requiredAdvance > 0 ? Number(fd.get("advance_amount") ?? requiredAdvance) : undefined,
+          advanceMethod: (fd.get("advance_method") as "CASH" | "CARD" | "OTHER") || "OTHER",
+          advanceNotes: (fd.get("advance_notes") as string) || undefined,
+          paymentProof: (() => {
+            const file = fd.get("payment_proof");
+            return file instanceof File && file.size > 0 ? file : null;
+          })(),
+        });
+        if (result.error) {
+          setError(result.error);
+          return;
+        }
+
         const firstName = fd.get("first_name") as string;
         const lastName = (fd.get("last_name") as string) || "";
         const phone = fd.get("phone") as string;
@@ -114,41 +152,74 @@ export function OnlineBookingForm({
         }));
         const advancePaid =
           requiredAdvance > 0 ? Number(fd.get("advance_amount") ?? requiredAdvance) : undefined;
+        const awaitingPayment = !!result.pendingApproval;
+        const bookingNumber =
+          result.bookingNumber ||
+          (result.appointmentId
+            ? `BK-${result.appointmentId.replace(/-/g, "").slice(0, 8).toUpperCase()}`
+            : "BK-PENDING");
 
-        setLastBooking({
+        const bookingSummary = {
+          bookingNumber,
           customerName: [firstName, lastName].filter(Boolean).join(" "),
           customerPhone: phone,
           staffName: staffMember?.full_name ?? "",
           scheduledAt,
           services: bookedServices,
           advanceAmount: advancePaid,
-        });
+        };
 
-        setPendingApproval(!!result.pendingApproval);
+        setLastBooking(bookingSummary);
+        setPendingApproval(awaitingPayment);
         setMessage(
-          result.pendingApproval
-            ? "Booking received! We will confirm your appointment once your advance payment is verified."
+          awaitingPayment
+            ? "Your request has been sent successfully. We will approve your booking after payment confirmation."
             : "Your appointment is confirmed! We look forward to seeing you."
         );
 
+        const whatsappUrl = getOnlineBookingSalonWhatsAppUrl({
+          ...bookingSummary,
+          pendingApproval: awaitingPayment,
+        });
+        if (whatsappUrl) {
+          window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+        }
+
         const receiptHtml = renderAppointmentReceiptHtml({
           business: { name: orgName, phone: BRAND.phone, address: BRAND.address },
-          customerName: [firstName, lastName].filter(Boolean).join(" "),
+          bookingNumber,
+          customerName: bookingSummary.customerName,
           customerPhone: phone,
           staffName: staffMember?.full_name,
           services: bookedServices,
           scheduledAt,
           source: "ONLINE",
-          status: result.pendingApproval ? "SCHEDULED" : "CONFIRMED",
+          status: awaitingPayment ? "SCHEDULED" : "CONFIRMED",
           advanceAmount: advancePaid,
-          pendingApproval: !!result.pendingApproval,
+          pendingApproval: awaitingPayment,
         });
         printThermalHtml(receiptHtml);
+      } catch (err) {
+        const raw = err instanceof Error ? err.message : String(err);
+        if (/body exceeded|Body exceeded|1 MB|body size/i.test(raw)) {
+          setError(
+            "Payment screenshot is too large for upload. Please use an image under 5 MB and try again."
+          );
+        } else {
+          setError(raw || "Something went wrong. Please try again.");
+        }
       }
     });
   }
 
   if (message) {
+    const whatsappUrl = lastBooking
+      ? getOnlineBookingSalonWhatsAppUrl({
+          ...lastBooking,
+          pendingApproval,
+        })
+      : null;
+
     return (
       <div
         className={cn(
@@ -162,34 +233,74 @@ export function OnlineBookingForm({
           <CheckCircle2 className="size-8" />
         </div>
         <h3 className="mt-6 font-serif text-2xl font-semibold text-stone-900">
-          {pendingApproval ? "Booking submitted" : "You&apos;re all set!"}
+          {pendingApproval ? "Request sent successfully" : "You're all set!"}
         </h3>
-        <p className="mt-3 text-stone-600">{message}</p>
-        {lastBooking && (
-          <Button
-            type="button"
-            variant="outline"
-            className="mt-6"
-            onClick={() => {
-              const receiptHtml = renderAppointmentReceiptHtml({
-                business: { name: orgName, phone: BRAND.phone, address: BRAND.address },
-                customerName: lastBooking.customerName,
-                customerPhone: lastBooking.customerPhone,
-                staffName: lastBooking.staffName,
-                services: lastBooking.services,
-                scheduledAt: lastBooking.scheduledAt,
-                source: "ONLINE",
-                status: pendingApproval ? "SCHEDULED" : "CONFIRMED",
-                advanceAmount: lastBooking.advanceAmount,
-                pendingApproval,
-              });
-              printThermalHtml(receiptHtml);
-            }}
-          >
-            <Printer className="mr-2 size-4" />
-            Print appointment slip
-          </Button>
+        <p className="mx-auto mt-3 max-w-md text-stone-600">{message}</p>
+        {pendingApproval && (
+          <p className="mx-auto mt-2 max-w-md text-sm text-amber-800">
+            Our team will review your payment screenshot and confirm your appointment shortly.
+          </p>
         )}
+        {lastBooking && (
+          <div className="mx-auto mt-6 max-w-sm rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-left text-sm text-stone-700">
+            <p>
+              <span className="text-stone-500">Booking No.</span>
+              <br />
+              <span className="font-mono text-base font-semibold tracking-wide text-stone-900">
+                {lastBooking.bookingNumber}
+              </span>
+            </p>
+            <p className="mt-2">
+              <span className="text-stone-500">Visit</span>
+              <br />
+              <span className="font-medium">{formatDateTime(lastBooking.scheduledAt)}</span>
+            </p>
+            {lastBooking.staffName ? (
+              <p className="mt-2">
+                <span className="text-stone-500">Stylist</span>
+                <br />
+                <span className="font-medium">{lastBooking.staffName}</span>
+              </p>
+            ) : null}
+          </div>
+        )}
+        <div className="mt-6 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+          {whatsappUrl && (
+            <Button
+              type="button"
+              className="bg-emerald-700 hover:bg-emerald-800"
+              render={<a href={whatsappUrl} target="_blank" rel="noopener noreferrer" />}
+            >
+              <MessageCircle className="mr-2 size-4" />
+              Send on WhatsApp
+            </Button>
+          )}
+          {lastBooking && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                const receiptHtml = renderAppointmentReceiptHtml({
+                  business: { name: orgName, phone: BRAND.phone, address: BRAND.address },
+                  bookingNumber: lastBooking.bookingNumber,
+                  customerName: lastBooking.customerName,
+                  customerPhone: lastBooking.customerPhone,
+                  staffName: lastBooking.staffName,
+                  services: lastBooking.services,
+                  scheduledAt: lastBooking.scheduledAt,
+                  source: "ONLINE",
+                  status: pendingApproval ? "SCHEDULED" : "CONFIRMED",
+                  advanceAmount: lastBooking.advanceAmount,
+                  pendingApproval,
+                });
+                printThermalHtml(receiptHtml);
+              }}
+            >
+              <Printer className="mr-2 size-4" />
+              Print appointment slip
+            </Button>
+          )}
+        </div>
         {isMarketing && (
           <Button className="mt-8 bg-stone-900 hover:bg-amber-900" render={<Link href="/" />}>
             Back to home
@@ -207,7 +318,7 @@ export function OnlineBookingForm({
       className={cn(
         "w-full",
         isMarketing
-          ? "rounded-2xl border border-stone-200 bg-white p-6 shadow-lg shadow-stone-900/5 sm:p-8"
+          ? "border border-[var(--m-line)] bg-white p-6 sm:p-8"
           : "mx-auto max-w-lg rounded-xl border bg-card"
       )}
     >
@@ -219,9 +330,9 @@ export function OnlineBookingForm({
       )}
 
       {isMarketing && (
-        <div className="mb-8 border-b border-stone-100 pb-6">
-          <h2 className="font-serif text-2xl font-semibold text-stone-900">Your details</h2>
-          <p className="mt-1 text-sm text-stone-500">All fields marked * are required</p>
+        <div className="mb-8 border-b border-[var(--m-line)] pb-6">
+          <h2 className="font-display text-2xl font-semibold text-[var(--m-ink)]">Your details</h2>
+          <p className="mt-1 text-sm text-[var(--m-muted)]">All fields marked * are required</p>
         </div>
       )}
 
@@ -278,64 +389,12 @@ export function OnlineBookingForm({
           </div>
         </div>
 
-        <div className="border-t border-stone-100 pt-6">
-          <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-amber-700">
-            Appointment
-          </p>
-
-          <div className="space-y-5">
-            <div className="space-y-2">
-              <Label htmlFor="staff_id" className={isMarketing ? "text-stone-700" : undefined}>
-                Stylist *
-              </Label>
-              <select
-                id="staff_id"
-                name="staff_id"
-                required
-                value={staffId}
-                onChange={(e) => setStaffId(e.target.value)}
-                className={selectClass}
-              >
-                <option value="">Select your stylist…</option>
-                {staff.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.full_name}
-                    {s.job_title ? ` — ${s.job_title}` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="date" className={isMarketing ? "text-stone-700" : undefined}>
-                Date *
-              </Label>
-              <Input
-                id="date"
-                name="date"
-                type="date"
-                required
-                min={minDateStr}
-                max={maxDateStr}
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className={isMarketing ? "h-11 rounded-xl border-stone-200" : undefined}
-              />
-            </div>
-
-            <PublicSlotPicker
-              orgSlug={orgSlug}
-              date={date}
-              staffId={staffId}
-              serviceIds={serviceIds}
-              className={isMarketing ? selectClass : undefined}
-            />
-          </div>
-        </div>
-
         {services.length > 0 && (
-          <div className="space-y-3">
+          <div className="space-y-3 border-t border-stone-100 pt-6">
             <Label className={isMarketing ? "text-stone-700" : undefined}>Services</Label>
+            <p className="text-xs text-muted-foreground">
+              Pick services first so available times match the total duration.
+            </p>
             <div className="grid gap-2 sm:grid-cols-2">
               {services.map((s) => {
                 const selected = serviceIds.includes(s.id);
@@ -374,12 +433,65 @@ export function OnlineBookingForm({
           />
         )}
 
+        <div className="border-t border-stone-100 pt-6">
+          <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-amber-700">
+            Appointment
+          </p>
+
+          <div className="space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="staff_id" className={isMarketing ? "text-stone-700" : undefined}>
+                Stylist *
+              </Label>
+              <select
+                id="staff_id"
+                name="staff_id"
+                required
+                value={staffId}
+                onChange={(e) => setStaffId(e.target.value)}
+                className={selectClass}
+              >
+                <option value="">Select your stylist…</option>
+                {staff.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.full_name}
+                    {s.job_title ? ` — ${s.job_title}` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="date" className={isMarketing ? "text-stone-700" : undefined}>
+                Date *
+              </Label>
+              <BookingDateField
+                id="date"
+                name="date"
+                value={date}
+                min={minDateStr}
+                max={maxDateStr}
+                onChange={setDate}
+              />
+            </div>
+
+            <PublicSlotPicker
+              orgSlug={orgSlug}
+              date={date}
+              staffId={staffId}
+              serviceIds={serviceIds}
+              className={isMarketing ? selectClass : undefined}
+            />
+          </div>
+        </div>
+
         {requiredAdvance > 0 && (
           <div className="space-y-4 rounded-xl border border-amber-200 bg-amber-50/50 p-4">
             <div>
               <p className="font-semibold text-amber-900">Advance payment required</p>
               <p className="mt-1 text-sm text-amber-800">
-                Send {formatCurrency(requiredAdvance)} to secure your booking. Admin will verify before confirming.
+                Send {formatCurrency(requiredAdvance)} via JazzCash, EasyPaisa, or bank transfer,
+                then upload a screenshot. Our team will approve or reject before confirming.
               </p>
               {advanceSettings?.booking_payment_instructions && (
                 <p className="mt-2 whitespace-pre-wrap rounded-lg bg-white/80 p-3 text-sm text-stone-700">
@@ -388,38 +500,63 @@ export function OnlineBookingForm({
               )}
             </div>
             <input type="hidden" name="advance_amount" value={requiredAdvance} />
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="advance_method">Payment method *</Label>
-                <select
-                  id="advance_method"
-                  name="advance_method"
-                  required
-                  defaultValue="OTHER"
-                  className={selectClass}
-                >
-                  <option value="OTHER">JazzCash / EasyPaisa / Bank</option>
-                  <option value="CARD">Card</option>
-                  <option value="CASH">Cash deposit</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="payment_reference">Transaction ID / reference *</Label>
-                <Input
-                  id="payment_reference"
-                  name="payment_reference"
-                  required
-                  placeholder="e.g. TID123456789"
-                  className={isMarketing ? "h-11 rounded-xl border-stone-200" : undefined}
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="advance_method">Payment method *</Label>
+              <select
+                id="advance_method"
+                name="advance_method"
+                required
+                defaultValue="OTHER"
+                className={selectClass}
+              >
+                <option value="OTHER">JazzCash / EasyPaisa / Bank</option>
+                <option value="CARD">Card</option>
+                <option value="CASH">Cash deposit</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="payment_proof">Payment screenshot *</Label>
+              <Input
+                id="payment_proof"
+                name="payment_proof"
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                required
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) {
+                    setProofFileError(null);
+                    return;
+                  }
+                  if (file.size > MAX_PROOF_BYTES) {
+                    setProofFileError(
+                      "Image must be 5 MB or smaller. Please choose a smaller file."
+                    );
+                    e.target.value = "";
+                    return;
+                  }
+                  setProofFileError(null);
+                }}
+                className={cn(
+                  "cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-amber-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-amber-900",
+                  isMarketing ? "h-11 rounded-xl border-stone-200" : undefined,
+                  proofFileError && "border-red-400"
+                )}
+              />
+              {proofFileError ? (
+                <p className="text-xs text-red-600">{proofFileError}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  JPG, PNG, or WebP · max 5 MB. No transaction ID needed.
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="advance_notes">Payment note (optional)</Label>
               <Input
                 id="advance_notes"
                 name="advance_notes"
-                placeholder="Sender name or bank used"
+                placeholder="Sender name or account used"
                 className={isMarketing ? "h-11 rounded-xl border-stone-200" : undefined}
               />
             </div>
@@ -444,7 +581,7 @@ export function OnlineBookingForm({
           size="lg"
           className={cn(
             "w-full",
-            isMarketing && "h-12 bg-stone-900 text-base hover:bg-amber-900"
+            isMarketing && "h-12 bg-[var(--m-ink)] text-base hover:bg-[var(--m-ink-soft)]"
           )}
           disabled={pending || !staff.length}
         >

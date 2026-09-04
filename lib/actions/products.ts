@@ -223,7 +223,7 @@ export async function getPosCatalog() {
   const org = await requireOrganization();
   const supabase = await createClient();
 
-  const [services, products, packages, customers] = await Promise.all([
+  const [services, products, packages, customers, staff] = await Promise.all([
     supabase
       .from("services")
       .select("id, name, price, duration_minutes")
@@ -249,6 +249,12 @@ export async function getPosCatalog() {
       .is("deleted_at", null)
       .order("first_name")
       .limit(100),
+    supabase
+      .from("staff")
+      .select("id, full_name")
+      .eq("organization_id", org.organizationId)
+      .eq("is_active", true)
+      .order("full_name"),
   ]);
 
   return {
@@ -256,5 +262,6 @@ export async function getPosCatalog() {
     products: products.data ?? [],
     packages: packages.data ?? [],
     customers: customers.data ?? [],
+    staff: staff.data ?? [],
   };
 }

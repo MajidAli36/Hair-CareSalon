@@ -286,11 +286,13 @@ export async function getTodayQueue() {
   return getQueueByDate();
 }
 
-export async function openDrawer(): Promise<ActionResult> {
+export async function openDrawer(source = "manual"): Promise<ActionResult> {
   const org = await requireMinimumRole("CASHIER");
   const drawerId = await findDeviceByType(org.organizationId, "DRAWER");
-  if (!drawerId) return { error: "No cash drawer device registered" };
-  await queueDeviceCommand(org.organizationId, drawerId, "OPEN_DRAWER", { source: "manual" });
+  if (!drawerId) {
+    return { error: "No cash drawer device registered. Add one under Devices." };
+  }
+  await queueDeviceCommand(org.organizationId, drawerId, "OPEN_DRAWER", { source });
   return { success: true };
 }
 

@@ -121,7 +121,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         .from("sales")
         .select("customer_id, total")
         .eq("organization_id", org.organizationId)
-        .eq("status", "COMPLETED")
+        .in("status", ["COMPLETED", "AMENDED"])
         .not("customer_id", "is", null);
       return data ?? [];
     })().catch(() => [] as { customer_id: string; total: number }[]),

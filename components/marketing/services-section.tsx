@@ -1,15 +1,5 @@
-import { Crown, Palette, Scissors, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { FEATURED_SERVICES } from "@/lib/marketing/brand";
-import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/format";
-
-const ICONS = {
-  scissors: Scissors,
-  palette: Palette,
-  sparkles: Sparkles,
-  crown: Crown,
-} as const;
 
 type LiveService = {
   id: string;
@@ -19,60 +9,62 @@ type LiveService = {
 };
 
 export function ServicesSection({ liveServices }: { liveServices?: LiveService[] }) {
-  const items =
-    liveServices && liveServices.length > 0
-      ? liveServices.slice(0, 4).map((s) => ({
-          title: s.name,
-          description: `Professional ${s.name.toLowerCase()} with premium products and expert care.`,
-          duration: `${s.duration_minutes} min`,
-          from: formatCurrency(s.price),
-          icon: "scissors" as const,
-        }))
-      : FEATURED_SERVICES;
+  const items = (liveServices ?? []).map((s) => ({
+    id: s.id,
+    title: s.name,
+    duration: `${s.duration_minutes} min`,
+    from: formatCurrency(s.price),
+  }));
+
+  const count = items.length;
 
   return (
-    <section id="services" className="scroll-mt-24 border-t border-stone-200/80 bg-white py-24">
+    <section id="services" className="scroll-mt-24 bg-[var(--m-paper)] py-24 sm:py-28">
       <div className="mx-auto max-w-6xl px-6">
-        <div className="mx-auto max-w-2xl text-center">
-          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-amber-700">Our services</p>
-          <h2 className="mt-3 font-serif text-4xl font-semibold tracking-tight text-stone-900 sm:text-5xl">
-            Crafted for every style
+        <div className="max-w-xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[var(--m-accent)]">
+            Services
+          </p>
+          <h2 className="mt-3 font-display text-4xl font-semibold tracking-tight text-[var(--m-ink)] sm:text-5xl">
+            Crafted for how you live
           </h2>
-          <p className="mt-4 text-lg text-stone-600">
-            From everyday cuts to special-occasion glam — every service is tailored to you.
+          <p className="mt-4 text-lg leading-relaxed text-[var(--m-muted)]">
+            {count > 0
+              ? `${count} service${count === 1 ? "" : "s"} from our live menu — priced and timed as in the salon.`
+              : "Our service menu will appear here once the salon publishes offerings."}
           </p>
         </div>
 
-        <div className="mt-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {items.map((service) => {
-            const Icon = ICONS[service.icon] ?? Scissors;
-            return (
-              <article
-                key={service.title}
-                className="group flex flex-col rounded-2xl border border-stone-200 bg-[#faf8f5] p-6 transition-all duration-300 hover:-translate-y-1 hover:border-amber-200 hover:shadow-lg hover:shadow-amber-900/5"
+        {count === 0 ? (
+          <p className="mt-14 border-y border-[var(--m-line)] py-10 text-[var(--m-muted)]">
+            No active services yet. Add them under Catalog → Services.
+          </p>
+        ) : (
+          <ul className="mt-14 divide-y divide-[var(--m-line)] border-y border-[var(--m-line)]">
+            {items.map((service) => (
+              <li
+                key={service.id}
+                className="grid gap-3 py-8 sm:grid-cols-[1.4fr_auto] sm:items-baseline sm:gap-8"
               >
-                <div className="flex size-12 items-center justify-center rounded-xl bg-amber-100 text-amber-800 transition-colors group-hover:bg-amber-800 group-hover:text-white">
-                  <Icon className="size-5" />
+                <h3 className="font-display text-2xl font-medium text-[var(--m-ink)] sm:text-3xl">
+                  {service.title}
+                </h3>
+                <div className="flex items-baseline gap-4 text-sm sm:justify-end">
+                  <span className="text-[var(--m-muted)]">{service.duration}</span>
+                  <span className="font-semibold text-[var(--m-ink)]">from {service.from}</span>
                 </div>
-                <h3 className="mt-5 font-serif text-xl font-medium text-stone-900">{service.title}</h3>
-                <p className="mt-2 flex-1 text-sm leading-relaxed text-stone-600">{service.description}</p>
-                <div className="mt-5 flex items-center justify-between border-t border-stone-200 pt-4 text-sm">
-                  <span className="text-stone-500">{service.duration}</span>
-                  <span className="font-semibold text-amber-800">from {service.from}</span>
-                </div>
-              </article>
-            );
-          })}
-        </div>
+              </li>
+            ))}
+          </ul>
+        )}
 
-        <div className="mt-12 text-center">
-          <Button
-            size="lg"
-            className="bg-stone-900 hover:bg-amber-900"
-            render={<Link href="/book" />}
+        <div className="mt-10">
+          <Link
+            href="/book"
+            className="inline-flex h-11 items-center border border-[var(--m-ink)] px-6 text-sm font-semibold tracking-wide text-[var(--m-ink)] transition-colors hover:bg-[var(--m-ink)] hover:text-[var(--m-paper)]"
           >
             Book a service
-          </Button>
+          </Link>
         </div>
       </div>
     </section>

@@ -1,13 +1,14 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, HelpCircle, Search } from "lucide-react";
+import { HelpCircle, Search } from "lucide-react";
 import { getPageTitle } from "@/lib/navigation";
 import { getInitials } from "@/lib/format";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NotificationBell } from "@/components/layout/notification-bell";
 import { UserMenu } from "@/components/layout/user-menu";
 
 type AppHeaderProps = {
@@ -69,9 +70,7 @@ export function AppHeader({ userEmail, userRole, organizationName }: AppHeaderPr
         >
           <Search className="size-4" />
         </Button>
-        <Button variant="ghost" size="icon-sm" className="hidden sm:inline-flex" aria-label="Notifications">
-          <Bell className="size-4" />
-        </Button>
+        <NotificationBell />
         <Button variant="ghost" size="icon-sm" className="hidden sm:inline-flex" aria-label="Help">
           <HelpCircle className="size-4" />
         </Button>

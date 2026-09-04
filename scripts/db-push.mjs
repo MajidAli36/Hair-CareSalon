@@ -1,6 +1,6 @@
 import {
   loadEnvLocal,
-  getDatabaseUrl,
+  getDatabaseUrlCandidates,
   getProjectRef,
   run,
   printDbEnvHelp,
@@ -9,39 +9,65 @@ import { testConnection } from "./run-sql.mjs";
 import { runIncrementalMigrations } from "./run-migrations.mjs";
 
 const env = loadEnvLocal();
-const dbUrl = getDatabaseUrl(env);
+const candidates = getDatabaseUrlCandidates(env);
 const password = env.SUPABASE_DB_PASSWORD;
 const projectRef = getProjectRef(env);
 
 console.log(`\n=== Pushing migrations to ${projectRef} ===\n`);
 
-if (dbUrl) {
-  try {
-    console.log("Connecting to database…");
-    await testConnection(dbUrl);
-    console.log("Applying pending migrations from supabase/migrations/…\n");
-    const result = await runIncrementalMigrations(dbUrl);
-    console.log(
-      `\n✓ Done — ${result.ran} applied, ${result.skipped} already up to date (${result.total} total)\n`
-    );
-    process.exit(0);
-  } catch (err) {
-    console.error("\nDirect migration failed:", err.message);
-    if (!password) {
-      console.error(
-        "\nTip: use npm run db:push (not npx supabase db push) — it reads DATABASE_URL from .env.local.\n"
-      );
-      process.exit(1);
-    }
-    console.log("Falling back to Supabase CLI…\n");
-  }
-}
+if (candidates.length) {
+  let lastError = null;
 
-if (!password) {
+  for (const dbUrl of candidates) {
+    const host = dbUrl.match(/@([^/]+)/)?.[1] ?? "(unknown host)";
+    try {
+      console.log(`Connecting via ${host}…`);
+      await testConnection(dbUrl);
+      console.log("Applying pending migrations from supabase/migrations/…\n");
+      const result = await runIncrementalMigrations(dbUrl);
+      console.log(
+        `\n✓ Done — ${result.ran} applied, ${result.skipped} already up to date (${result.total} total)\n`
+      );
+      process.exit(0);
+    } catch (err) {
+      lastError = err;
+      console.error(`  ✗ ${err.message}`);
+    }
+  }
+
+  console.error("\nAll database connection attempts failed.");
+  if (lastError) console.error("Last error:", lastError.message);
+
+  if (/ENOTFOUND|ECONNREFUSED|EHOSTUNREACH|IPv6/i.test(String(lastError?.message ?? ""))) {
+    console.error(`
+This usually means the direct host db.${projectRef}.supabase.co is IPv6-only.
+Fix: in Supabase Dashboard → Project Settings → Database → Connection string,
+copy the **Pooler** URI (host ends with pooler.supabase.com) into .env.local:
+
+  DATABASE_URL=postgresql://postgres.${projectRef}:YOUR_PASSWORD@aws-0-REGION.pooler.supabase.com:6543/postgres
+
+Optional if password-only setup:
+
+  SUPABASE_DB_PASSWORD=...
+  SUPABASE_DB_REGION=ap-southeast-1
+`);
+  }
+
+  if (!password) {
+    printDbEnvHelp();
+    process.exit(1);
+  }
+  console.log("Falling back to Supabase CLI…\n");
+} else if (!password) {
   printDbEnvHelp();
   console.error(
     "\nYou ran `npx supabase db push` without linking. Use instead:\n\n  npm run db:push\n"
   );
+  process.exit(1);
+}
+
+if (!password) {
+  printDbEnvHelp();
   process.exit(1);
 }
 

@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getCustomer, getCustomerHistory, updateCustomer } from "@/lib/actions/customers";
-import { canManageRecords } from "@/lib/auth/permissions";
+import { getCustomerFinancialSummary } from "@/lib/actions/payments";
+import { canManageRecords, canUsePos } from "@/lib/auth/permissions";
 import { CustomerForm } from "@/components/features/customers/customer-form";
 import { CustomerHistoryPanel } from "@/components/features/customers/customer-history";
 import { DeleteCustomerButton } from "@/components/features/customers/delete-customer-button";
@@ -19,16 +20,22 @@ import { formatCurrency, formatCustomerName, formatDate } from "@/lib/format";
 
 type CustomerDetailPageProps = {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
 };
 
 export default async function CustomerDetailPage({
   params,
+  searchParams,
 }: CustomerDetailPageProps) {
   const { id } = await params;
-  const [customer, history, canManage] = await Promise.all([
+  const { tab } = await searchParams;
+  const showDueOnly = tab === "dues";
+  const [customer, history, canManage, canPos, financial] = await Promise.all([
     getCustomer(id),
     getCustomerHistory(id),
     canManageRecords(),
+    canUsePos(),
+    getCustomerFinancialSummary(id),
   ]);
 
   if (!customer || !history) notFound();
@@ -37,19 +44,15 @@ export default async function CustomerDetailPage({
   const boundUpdate = updateCustomer.bind(null, id);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="mx-auto max-w-5xl space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">{fullName}</h1>
-          <p className="text-muted-foreground">Customer profile & full history</p>
+          <p className="text-muted-foreground">Customer profile, dues & history</p>
         </div>
         <div className="flex gap-2">
           {customer.phone && (
-            <WhatsAppSendButton
-              phone={customer.phone}
-              customerId={id}
-              customerName={fullName}
-            />
+            <WhatsAppSendButton phone={customer.phone} customerName={fullName} />
           )}
           <Button variant="outline" size="sm" render={<Link href={`/appointments`} />}>
             Book appointment
@@ -74,26 +77,39 @@ export default async function CustomerDetailPage({
           {customer.tags?.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {customer.tags.map((tag) => (
-                <Badge key={tag} variant="secondary">{tag}</Badge>
+                <Badge key={tag} variant="secondary">
+                  {tag}
+                </Badge>
               ))}
             </div>
           )}
           <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
             <span>Added {formatDate(customer.created_at)}</span>
-            <span>Lifetime value: {formatCurrency(history.stats.totalSpent)}</span>
+            <span>Outstanding: {formatCurrency(financial.outstandingDue)}</span>
           </div>
           {customer.notes && (
-            <p className="text-sm whitespace-pre-wrap rounded-lg bg-muted/50 p-3">{customer.notes}</p>
+            <p className="whitespace-pre-wrap rounded-lg bg-muted/50 p-3 text-sm">
+              {customer.notes}
+            </p>
           )}
         </CardContent>
       </Card>
 
-      <CustomerHistoryPanel history={history} />
+      <CustomerHistoryPanel
+        history={history}
+        customerId={id}
+        financial={financial}
+        canReceivePayment={canPos || canManage}
+        canViewStatement={canManage}
+        showDueOnly={showDueOnly}
+      />
 
       {canManage && (
         <>
           <Card>
-            <CardHeader><CardTitle>Edit customer</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle>Edit customer</CardTitle>
+            </CardHeader>
             <CardContent>
               <CustomerForm action={boundUpdate} customer={customer} />
             </CardContent>

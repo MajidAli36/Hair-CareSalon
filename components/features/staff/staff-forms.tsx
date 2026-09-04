@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useTransition } from "react";
+import { useActionState, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { createStaff, recordManualAttendance } from "@/lib/actions/staff";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,18 +41,50 @@ export function StaffForm() {
   );
 }
 
-export function AttendanceButtons({ staffId }: { staffId: string }) {
+export function AttendanceButtons({
+  staffId,
+  onDuty = false,
+}: {
+  staffId: string;
+  onDuty?: boolean;
+}) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function run(action: "in" | "out") {
+    setError(null);
+    startTransition(async () => {
+      const result = await recordManualAttendance(staffId, action);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
   return (
-    <div className="flex gap-1">
-      <Button size="sm" variant="outline" disabled={pending}
-        onClick={() => startTransition(async () => { await recordManualAttendance(staffId, "in"); })}>
-        In
-      </Button>
-      <Button size="sm" variant="ghost" disabled={pending}
-        onClick={() => startTransition(async () => { await recordManualAttendance(staffId, "out"); })}>
-        Out
-      </Button>
+    <div className="space-y-1">
+      <div className="flex gap-1">
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={pending || onDuty}
+          onClick={() => run("in")}
+        >
+          In
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={pending || !onDuty}
+          onClick={() => run("out")}
+        >
+          Out
+        </Button>
+      </div>
+      {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );
 }

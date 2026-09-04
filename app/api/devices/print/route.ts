@@ -92,7 +92,21 @@ export async function POST(request: Request) {
         depositApplied: Number(sale.deposit_applied ?? 0),
         total: Number(sale.total),
         paymentMethod: payments?.[0]?.method ?? "CASH",
-        amountPaid: (payments ?? []).reduce((s, p) => s + Number(p.amount), 0),
+        amountPaid:
+          sale.amount_paid != null
+            ? Number(sale.amount_paid)
+            : (payments ?? []).reduce((s, p) => s + Number(p.amount), 0),
+        amountDue:
+          sale.amount_due != null
+            ? Number(sale.amount_due)
+            : Math.max(
+                0,
+                Number(sale.total) -
+                  (sale.amount_paid != null
+                    ? Number(sale.amount_paid)
+                    : (payments ?? []).reduce((s, p) => s + Number(p.amount), 0)) +
+                  Number(sale.amount_refunded ?? 0)
+              ),
       });
 
       receiptData = { type: "receipt", saleId, invoice: invoice?.invoice_number };

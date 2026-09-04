@@ -82,7 +82,9 @@ export function SlotPicker({
         value={visibleSlots.find((s) => s.iso === selected)?.staffId ?? ""}
       />
       {!pending && visibleSlots.length === 0 && date && (
-        <p className="text-xs text-muted-foreground">No open slots for this date. Try another day or staff member.</p>
+        <p className="text-xs text-muted-foreground">
+          No open slots for this date. Try another day, staff member, or shorter service list.
+        </p>
       )}
     </div>
   );

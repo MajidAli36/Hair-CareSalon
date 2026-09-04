@@ -1,143 +1,94 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
-import { sendWhatsAppMessage } from "@/lib/actions/whatsapp";
+import { useMemo, useState } from "react";
+import type { WhatsAppCustomer } from "@/lib/actions/whatsapp";
 import { buildWhatsAppSendUrl } from "@/lib/whatsapp/links";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import type { ActionResult } from "@/types/commerce";
 
-const TEMPLATES = [
-  {
-    label: "Appointment confirmed",
-    body: "Hi! Your appointment at our salon is confirmed. We look forward to seeing you. Reply here if you need to reschedule.",
-  },
-  {
-    label: "Reminder",
-    body: "Hi! This is a friendly reminder about your upcoming salon appointment. Please arrive 5 minutes early. See you soon!",
-  },
-  {
-    label: "Thank you",
-    body: "Thank you for visiting us today! We hope you loved your service. Book your next visit anytime — we'd love to see you again.",
-  },
-  {
-    label: "Booking link",
-    body: "Hi! You can book your next appointment online on our website. Let us know if you need any help choosing a service or stylist.",
-  },
-] as const;
+function customerName(customer: WhatsAppCustomer) {
+  return [customer.first_name, customer.last_name].filter(Boolean).join(" ");
+}
 
-export function SendWhatsAppForm() {
-  const [state, formAction, pending] = useActionState(sendWhatsAppMessage, {} as ActionResult);
-  const [body, setBody] = useState("");
-  const [phone, setPhone] = useState("");
-  const [previewError, setPreviewError] = useState<string | null>(null);
+function greeting(customer?: WhatsAppCustomer) {
+  const firstName = customer?.first_name?.trim();
+  return firstName
+    ? `Hi ${firstName}, this is Hair & Care Salon.`
+    : "Hi, this is Hair & Care Salon.";
+}
 
-  useEffect(() => {
-    if (state.success && state.sentVia === "wa_me" && state.waUrl) {
-      window.open(state.waUrl, "_blank", "noopener,noreferrer");
-    }
-  }, [state.success, state.sentVia, state.waUrl]);
+export function SendWhatsAppForm({ customers }: { customers: WhatsAppCustomer[] }) {
+  const [customerId, setCustomerId] = useState(customers[0]?.id ?? "");
+  const selectedCustomer = useMemo(
+    () => customers.find((customer) => customer.id === customerId),
+    [customerId, customers]
+  );
+  const [error, setError] = useState<string | null>(null);
 
-  function applyTemplate(text: string) {
-    setBody(text);
-    setPreviewError(null);
+  function selectCustomer(id: string) {
+    setCustomerId(id);
+    setError(null);
   }
 
-  function handlePreview() {
-    const url = buildWhatsAppSendUrl(phone, body);
+  function openWhatsApp() {
+    const message = greeting(selectedCustomer);
+    const url = selectedCustomer
+      ? buildWhatsAppSendUrl(selectedCustomer.phone, message)
+      : null;
     if (!url) {
-      setPreviewError("Enter a valid phone and message first.");
+      setError("Select a customer with a valid phone number.");
       return;
     }
-    setPreviewError(null);
+
+    setError(null);
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
+  if (customers.length === 0) {
+    return (
+      <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+        No customers with phone numbers found. Add a customer phone number first.
+      </p>
+    );
+  }
+
   return (
-    <form action={formAction} className="space-y-4">
+    <div className="space-y-5">
       <div className="space-y-2">
-        <Label>Quick templates</Label>
-        <div className="flex flex-wrap gap-2">
-          {TEMPLATES.map((t) => (
-            <Button
-              key={t.label}
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => applyTemplate(t.body)}
-            >
-              {t.label}
-            </Button>
+        <Label htmlFor="wa_customer">Customer</Label>
+        <select
+          id="wa_customer"
+          value={customerId}
+          onChange={(event) => selectCustomer(event.target.value)}
+          className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none focus-visible:ring-[3px]"
+        >
+          {customers.map((customer) => (
+            <option key={customer.id} value={customer.id}>
+              {customerName(customer)} — {customer.phone}
+            </option>
           ))}
-        </div>
+        </select>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="wa_phone">Customer phone *</Label>
-        <Input
-          id="wa_phone"
-          name="phone"
-          type="tel"
-          placeholder="+923001234567 or 03001234567"
-          required
-          value={phone}
-          onChange={(e) => {
-            setPhone(e.target.value);
-            setPreviewError(null);
-          }}
-        />
-        <p className="text-xs text-muted-foreground">
-          Linked mode: each send waits a random <strong>10–15 seconds</strong> before delivery
-          (account safety). Status in the log updates when it sends.
+      <div className="rounded-lg bg-muted/40 p-4 text-sm">
+        <p>
+          <span className="text-muted-foreground">Customer:</span>{" "}
+          <strong>{selectedCustomer ? customerName(selectedCustomer) : "—"}</strong>
+        </p>
+        <p className="mt-1">
+          <span className="text-muted-foreground">Phone:</span>{" "}
+          <strong>{selectedCustomer?.phone ?? "—"}</strong>
         </p>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="wa_body">Message *</Label>
-        <Textarea
-          id="wa_body"
-          name="body"
-          rows={4}
-          required
-          placeholder="Your appointment is confirmed…"
-          value={body}
-          onChange={(e) => {
-            setBody(e.target.value);
-            setPreviewError(null);
-          }}
-        />
-      </div>
+      {error && <p className="text-sm text-destructive">{error}</p>}
 
-      {(state.error || previewError) && (
-        <p className="text-sm text-destructive">{state.error ?? previewError}</p>
-      )}
-      {state.success && state.sentVia === "queued" && (
-        <p className="text-sm text-green-600">
-          Queued
-          {state.queuePosition ? ` (#${state.queuePosition})` : ""}. Waiting 10–15s safety gap,
-          then status becomes SENT
-          {typeof state.estimatedWaitSeconds === "number"
-            ? ` · ETA ~${Math.max(state.estimatedWaitSeconds, 10)}s`
-            : ""}
-          .
-        </p>
-      )}
-      {state.success && state.sentVia === "wa_me" && (
-        <p className="text-sm text-green-600">
-          WhatsApp opened — tap Send there. Link salon WhatsApp above for automatic queued send.
-        </p>
-      )}
-
-      <div className="flex flex-wrap gap-2">
-        <Button type="submit" disabled={pending}>
-          {pending ? "Queueing…" : "Send via WhatsApp"}
-        </Button>
-        <Button type="button" variant="outline" onClick={handlePreview}>
-          Preview only
-        </Button>
-      </div>
-    </form>
+      <Button type="button" onClick={openWhatsApp}>
+        Send WhatsApp
+      </Button>
+      <p className="text-xs text-muted-foreground">
+        WhatsApp will open with this message filled in. Click Send there to deliver it.
+      </p>
+    </div>
   );
 }

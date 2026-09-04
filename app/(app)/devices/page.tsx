@@ -38,7 +38,7 @@ export default async function DevicesPage() {
           <CardTitle>Connected devices</CardTitle>
         </CardHeader>
         <CardContent>
-          <DevicesTable devices={devices} />
+          <DevicesTable devices={devices} canManage={canManage} />
         </CardContent>
       </Card>
 

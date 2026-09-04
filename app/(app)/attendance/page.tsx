@@ -33,8 +33,8 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Attendance</h1>
         <p className="text-muted-foreground">
-          Thumb impression check-in at the salon entrance. Enroll staff, open the kiosk display, and
-          review hours here.
+          Thumb impression at the entrance, or manual check-in when needed. Enroll staff, open the
+          kiosk, and review hours here.
         </p>
       </div>
 
@@ -42,12 +42,15 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
         <AttendanceDashboard
           report={report}
           overview={overview}
-          staffList={staffList.map((s) => ({
-            id: s.id,
-            full_name: s.full_name,
-            thumb_id: (s as { thumb_id?: string | null }).thumb_id ?? null,
-            thumb_enrolled_at: (s as { thumb_enrolled_at?: string | null }).thumb_enrolled_at ?? null,
-          }))}
+          staffList={staffList
+            .filter((s) => s.is_active !== false)
+            .map((s) => ({
+              id: s.id,
+              full_name: s.full_name,
+              thumb_id: (s as { thumb_id?: string | null }).thumb_id ?? null,
+              thumb_enrolled_at:
+                (s as { thumb_enrolled_at?: string | null }).thumb_enrolled_at ?? null,
+            }))}
           canManage={canManage}
           from={from}
           to={to}

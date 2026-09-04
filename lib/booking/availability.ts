@@ -15,6 +15,7 @@ type AppointmentRow = {
 };
 
 import { isSameLocalDay } from "@/lib/booking/dates";
+import { getLocalDateString } from "@/lib/dates/local";
 import { formatTime } from "@/lib/format";
 
 const DEFAULT_OPEN = "09:00";
@@ -65,15 +66,16 @@ export function computeAvailableSlots(params: {
     onlineOnly = false,
   } = params;
 
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return [];
+
   const dayDate = new Date(`${date}T12:00:00`);
   if (Number.isNaN(dayDate.getTime())) return [];
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const maxDate = new Date(today);
-  maxDate.setDate(maxDate.getDate() + maxDaysAhead);
-  const selected = new Date(`${date}T00:00:00`);
-  if (selected < today || selected > maxDate) return [];
+  const todayStr = getLocalDateString();
+  const maxAnchor = new Date(`${todayStr}T12:00:00`);
+  maxAnchor.setDate(maxAnchor.getDate() + maxDaysAhead);
+  const maxDateStr = getLocalDateString(maxAnchor);
+  if (date < todayStr || date > maxDateStr) return [];
 
   const dayOfWeek = dayDate.getDay();
   const scheduleByStaff = new Map<string, ScheduleRow>();

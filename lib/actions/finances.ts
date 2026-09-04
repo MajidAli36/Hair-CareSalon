@@ -73,7 +73,7 @@ export async function getFinancialSummary(from?: string, to?: string): Promise<F
         .from("sales")
         .select("total")
         .eq("organization_id", org.organizationId)
-        .eq("status", "COMPLETED")
+        .in("status", ["COMPLETED", "AMENDED"])
         .gte("completed_at", start.toISOString())
         .lte("completed_at", end.toISOString()),
       supabase

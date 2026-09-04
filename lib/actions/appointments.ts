@@ -13,6 +13,11 @@ import { assertCanAddDeposit, syncAppointmentAfterDepositChange } from "@/lib/ac
 import { sumServiceDuration } from "@/lib/booking/availability";
 import { getDayRange } from "@/lib/booking/dates";
 import { calculateRequiredAdvance, sumServicePrices } from "@/lib/booking/pricing";
+import {
+  bookingNumberFromId,
+  displayBookingNumber,
+} from "@/lib/booking/booking-number";
+import { getDepositProofSignedUrl, uploadDepositProof } from "@/lib/storage/deposit-proofs";
 import type { ActionResult } from "@/types/commerce";
 
 export async function createAppointment(
@@ -270,6 +275,8 @@ export type PosAppointment = {
   scheduledAt: string;
   status: string;
   depositBalance: number;
+  staffId: string | null;
+  staffName: string | null;
   services: { serviceId: string; name: string; price: number }[];
 };
 
@@ -287,9 +294,11 @@ export async function getAppointmentsForPos(): Promise<PosAppointment[]> {
       .select(`
         id,
         customer_id,
+        staff_id,
         scheduled_at,
         status,
         customer:customers(first_name, last_name),
+        staff:staff(full_name),
         services:appointment_services(service_id, service_name, price)
       `)
       .eq("organization_id", org.organizationId)
@@ -319,9 +328,11 @@ export async function getAppointmentsForPos(): Promise<PosAppointment[]> {
       .select(`
         id,
         customer_id,
+        staff_id,
         scheduled_at,
         status,
         customer:customers(first_name, last_name),
+        staff:staff(full_name),
         services:appointment_services(service_id, service_name, price)
       `)
       .eq("organization_id", org.organizationId)
@@ -342,6 +353,7 @@ export async function getAppointmentsForPos(): Promise<PosAppointment[]> {
         first_name: string;
         last_name: string | null;
       } | null;
+      const staff = row.staff as unknown as { full_name: string } | null;
       const services =
         (row.services as unknown as {
           service_id: string;
@@ -358,6 +370,8 @@ export async function getAppointmentsForPos(): Promise<PosAppointment[]> {
         scheduledAt: row.scheduled_at,
         status: row.status,
         depositBalance: depositMap[row.id] ?? 0,
+        staffId: row.staff_id ?? null,
+        staffName: staff?.full_name ?? null,
         services: services.map((s) => ({
           serviceId: s.service_id,
           name: s.service_name,
@@ -394,9 +408,11 @@ export async function getCustomerAdvanceAppointments(
     .select(`
       id,
       customer_id,
+      staff_id,
       scheduled_at,
       status,
       customer:customers(first_name, last_name),
+      staff:staff(full_name),
       services:appointment_services(service_id, service_name, price)
     `)
     .eq("organization_id", org.organizationId)
@@ -410,6 +426,7 @@ export async function getCustomerAdvanceAppointments(
       first_name: string;
       last_name: string | null;
     } | null;
+    const staff = row.staff as unknown as { full_name: string } | null;
     const services =
       (row.services as unknown as {
         service_id: string;
@@ -426,6 +443,8 @@ export async function getCustomerAdvanceAppointments(
       scheduledAt: row.scheduled_at,
       status: row.status,
       depositBalance: depositMap[row.id] ?? 0,
+      staffId: row.staff_id ?? null,
+      staffName: staff?.full_name ?? null,
       services: services.map((s) => ({
         serviceId: s.service_id,
         name: s.service_name,
@@ -491,6 +510,7 @@ export async function getAppointments(
       method: string;
       notes: string | null;
       payment_reference: string | null;
+      proof_path: string | null;
       applied_to_sale_id: string | null;
       refund_reason: string | null;
       refund_method: string | null;
@@ -503,7 +523,7 @@ export async function getAppointments(
     const { data: deposits } = await supabase
       .from("appointment_deposits")
       .select(
-        "id, appointment_id, amount, status, method, notes, payment_reference, applied_to_sale_id, refund_reason, refund_method, refunded_at, paid_at"
+        "id, appointment_id, amount, status, method, notes, payment_reference, proof_path, applied_to_sale_id, refund_reason, refund_method, refunded_at, paid_at"
       )
       .eq("organization_id", org.organizationId)
       .in("appointment_id", appointmentIds);
@@ -517,6 +537,7 @@ export async function getAppointments(
         method: d.method,
         notes: d.notes,
         payment_reference: d.payment_reference,
+        proof_path: (d as { proof_path?: string | null }).proof_path ?? null,
         applied_to_sale_id: d.applied_to_sale_id,
         refund_reason: d.refund_reason,
         refund_method: d.refund_method,
@@ -542,6 +563,7 @@ export async function getAppointments(
       method: string;
       notes: string | null;
       payment_reference: string | null;
+      proof_path: string | null;
       applied_to_sale_id: string | null;
       refund_reason: string | null;
       refund_method: string | null;
@@ -571,9 +593,15 @@ export async function createOnlineBooking(input: {
   notes?: string;
   advanceAmount?: number;
   advanceMethod?: "CASH" | "CARD" | "OTHER";
-  paymentReference?: string;
   advanceNotes?: string;
-}): Promise<{ error?: string; success?: boolean; pendingApproval?: boolean }> {
+  paymentProof?: File | null;
+}): Promise<{
+  error?: string;
+  success?: boolean;
+  pendingApproval?: boolean;
+  bookingNumber?: string;
+  appointmentId?: string;
+}> {
   const admin = tryCreateAdminClient();
   if (!admin) {
     return { error: "Online booking is not available. Please contact the salon." };
@@ -633,15 +661,27 @@ export async function createOnlineBooking(input: {
   const serviceTotal = sumServicePrices(serviceRows);
   const requiredAdvance = calculateRequiredAdvance(serviceTotal, org);
 
+  const proofFile = input.paymentProof;
+  const hasProof = Boolean(proofFile && proofFile.size > 0);
+
   if (requiredAdvance > 0) {
     const paid = Number(input.advanceAmount ?? 0);
     if (paid < requiredAdvance) {
       return {
-        error: `Advance of ${requiredAdvance} is required to confirm your booking. Please send payment and enter the transaction reference.`,
+        error: `Advance of ${requiredAdvance} is required to secure your booking. Please send payment and upload a screenshot.`,
       };
     }
-    if (!input.paymentReference?.trim()) {
-      return { error: "Please enter your payment transaction ID / reference." };
+    if (!hasProof) {
+      return {
+        error: "Please upload a screenshot of your JazzCash, EasyPaisa, or bank payment.",
+      };
+    }
+    const allowed = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
+    if (proofFile && !allowed.includes(proofFile.type)) {
+      return { error: "Payment proof must be an image (JPG, PNG, or WebP)." };
+    }
+    if (proofFile && proofFile.size > 5 * 1024 * 1024) {
+      return { error: "Payment screenshot must be 5 MB or smaller." };
     }
   }
 
@@ -672,22 +712,56 @@ export async function createOnlineBooking(input: {
     customerId = created.id;
   }
 
-  const { data: appt, error: apptErr } = await admin
-    .from("appointments")
-    .insert({
-      organization_id: org.id,
-      customer_id: customerId,
-      staff_id: input.staffId,
-      scheduled_at: new Date(input.scheduledAt).toISOString(),
-      duration_minutes: durationMinutes,
-      source: "ONLINE",
-      status: "SCHEDULED",
-      notes: input.notes ?? null,
-    })
-    .select("id")
-    .single();
+  let bookingNumber: string | null = null;
+  try {
+    const { data: nextNum } = await admin.rpc("next_booking_number", {
+      org_id: org.id,
+    });
+    if (typeof nextNum === "string" && nextNum.trim()) {
+      bookingNumber = nextNum.trim();
+    }
+  } catch {
+    bookingNumber = null;
+  }
 
-  if (apptErr || !appt) return { error: apptErr?.message ?? "Booking failed" };
+  const baseAppt = {
+    organization_id: org.id,
+    customer_id: customerId,
+    staff_id: input.staffId,
+    scheduled_at: new Date(input.scheduledAt).toISOString(),
+    duration_minutes: durationMinutes,
+    source: "ONLINE" as const,
+    status: "SCHEDULED" as const,
+    notes: input.notes ?? null,
+  };
+
+  let apptId: string | null = null;
+  if (bookingNumber) {
+    const withNumber = await admin
+      .from("appointments")
+      .insert({ ...baseAppt, booking_number: bookingNumber })
+      .select("id")
+      .single();
+    if (!withNumber.error && withNumber.data) {
+      apptId = withNumber.data.id;
+    } else if (withNumber.error && !/booking_number/i.test(withNumber.error.message)) {
+      return { error: withNumber.error.message };
+    }
+  }
+
+  if (!apptId) {
+    const plain = await admin.from("appointments").insert(baseAppt).select("id").single();
+    if (plain.error || !plain.data) return { error: plain.error?.message ?? "Booking failed" };
+    apptId = plain.data.id;
+    bookingNumber = bookingNumberFromId(apptId);
+    await admin
+      .from("appointments")
+      .update({ booking_number: bookingNumber })
+      .eq("id", apptId);
+  }
+
+  const resolvedBookingNumber = displayBookingNumber(bookingNumber, apptId);
+  const appt = { id: apptId };
 
   if (input.serviceIds.length > 0 && serviceRows.length) {
     await admin.from("appointment_services").insert(
@@ -706,13 +780,37 @@ export async function createOnlineBooking(input: {
   const advancePaid = Number(input.advanceAmount ?? 0);
   if (advancePaid > 0) {
     const needsApproval = requiredAdvance > 0;
+    let proofPath: string | null = null;
+
+    if (hasProof && proofFile) {
+      const ext =
+        proofFile.type === "image/png"
+          ? "png"
+          : proofFile.type === "image/webp"
+            ? "webp"
+            : "jpg";
+      const bytes = Buffer.from(await proofFile.arrayBuffer());
+      const uploaded = await uploadDepositProof({
+        organizationId: org.id,
+        appointmentId: appt.id,
+        bytes,
+        contentType: proofFile.type || "image/jpeg",
+        extension: ext,
+      });
+      if (!uploaded.ok) {
+        return { error: uploaded.error };
+      }
+      proofPath = uploaded.result.path;
+    }
+
     const { error: depErr } = await admin.from("appointment_deposits").insert({
       organization_id: org.id,
       appointment_id: appt.id,
       amount: advancePaid,
       method: input.advanceMethod ?? "OTHER",
       notes: input.advanceNotes ?? "Online booking advance",
-      payment_reference: input.paymentReference?.trim() || null,
+      payment_reference: null,
+      proof_path: proofPath,
       status: needsApproval ? "PENDING" : "APPROVED",
       approved_at: needsApproval ? null : new Date().toISOString(),
     });
@@ -734,8 +832,51 @@ export async function createOnlineBooking(input: {
     await admin.from("appointments").update({ status: "CONFIRMED" }).eq("id", appt.id);
   }
 
+  // Log inbound notify for salon WhatsApp inbox / audit trail
+  try {
+    const staffName =
+      (
+        await admin.from("staff").select("full_name").eq("id", input.staffId).maybeSingle()
+      ).data?.full_name ?? "";
+    const serviceNames = serviceRows.map((s) => s.name).join(", ") || "General visit";
+    const body = [
+      `New online booking ${resolvedBookingNumber}`,
+      `From: ${input.firstName}${input.lastName ? ` ${input.lastName}` : ""}`,
+      `Phone: ${input.phone}`,
+      staffName ? `Stylist: ${staffName}` : null,
+      `When: ${new Date(input.scheduledAt).toISOString()}`,
+      `Services: ${serviceNames}`,
+      pendingApproval ? "Status: awaiting payment confirmation" : "Status: confirmed",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    await admin.from("whatsapp_messages").insert({
+      organization_id: org.id,
+      customer_id: customerId,
+      direction: "INBOUND",
+      status: "RECEIVED",
+      phone: input.phone,
+      body,
+      metadata: {
+        source: "online_booking",
+        appointment_id: appt.id,
+        booking_number: resolvedBookingNumber,
+        pending_approval: pendingApproval,
+      },
+    });
+  } catch {
+    // Non-fatal — booking already saved
+  }
+
   revalidatePath("/appointments");
-  return { success: true, pendingApproval };
+  revalidatePath("/online-booking");
+  return {
+    success: true,
+    pendingApproval,
+    bookingNumber: resolvedBookingNumber,
+    appointmentId: appt.id,
+  };
 }
 
 export async function cancelOnlineAppointment(appointmentId: string): Promise<ActionResult> {
@@ -912,4 +1053,23 @@ export async function rejectAppointmentDeposit(depositId: string): Promise<Actio
   revalidatePath("/appointments");
   revalidatePath("/online-booking");
   return { success: true };
+}
+
+export async function getDepositProofUrl(
+  depositId: string
+): Promise<{ url?: string; error?: string }> {
+  const org = await requireMinimumRole("MANAGER");
+  const supabase = await createClient();
+
+  const { data: deposit } = await supabase
+    .from("appointment_deposits")
+    .select("id, proof_path")
+    .eq("id", depositId)
+    .eq("organization_id", org.organizationId)
+    .maybeSingle();
+
+  const path = (deposit as { proof_path?: string | null } | null)?.proof_path;
+  if (!path) return { error: "No payment screenshot on file" };
+
+  return getDepositProofSignedUrl(path);
 }

@@ -13,6 +13,7 @@ import type { MemberRole } from "@/types";
 import type { ActionResult } from "@/types/commerce";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmAction } from "@/components/ui/confirm-action";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -237,20 +238,20 @@ function TeamMemberRow({
             <ResetPasswordDialog member={member} />
           )}
           {!isOwner && (
-            <Button
-              type="button"
-              size="sm"
+            <ConfirmAction
+              title="Remove app login?"
+              description={`Remove ${member.email} from this salon? They will not be able to sign in. Salon staff profile is kept separately.`}
+              confirmLabel="Remove"
+              pendingLabel="Removing…"
               variant="ghost"
               className="text-destructive"
               disabled={pending}
-              onClick={() =>
-                startTransition(async () => {
-                  await removeTeamMember(member.id);
-                })
-              }
+              onConfirm={async () => {
+                await removeTeamMember(member.id);
+              }}
             >
               Remove
-            </Button>
+            </ConfirmAction>
           )}
         </div>
       </TableCell>
