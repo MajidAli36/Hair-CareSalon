@@ -9,6 +9,7 @@ export default function robots(): MetadataRoute.Robots {
         userAgent: "*",
         allow: ["/", "/book", "/login"],
         disallow: [
+          "/syncops",
           "/dashboard",
           "/api/",
           "/pos",

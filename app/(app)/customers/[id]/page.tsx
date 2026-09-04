@@ -2,7 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getCustomer, getCustomerHistory, updateCustomer } from "@/lib/actions/customers";
 import { getCustomerFinancialSummary } from "@/lib/actions/payments";
-import { canManageRecords, canUsePos } from "@/lib/auth/permissions";
+import {
+  canDeleteCustomers,
+  canManageCustomers,
+  canManageRecords,
+  canUsePos,
+} from "@/lib/auth/permissions";
 import { CustomerForm } from "@/components/features/customers/customer-form";
 import { CustomerHistoryPanel } from "@/components/features/customers/customer-history";
 import { DeleteCustomerButton } from "@/components/features/customers/delete-customer-button";
@@ -30,13 +35,16 @@ export default async function CustomerDetailPage({
   const { id } = await params;
   const { tab } = await searchParams;
   const showDueOnly = tab === "dues";
-  const [customer, history, canManage, canPos, financial] = await Promise.all([
-    getCustomer(id),
-    getCustomerHistory(id),
-    canManageRecords(),
-    canUsePos(),
-    getCustomerFinancialSummary(id),
-  ]);
+  const [customer, history, canEdit, canDelete, canManage, canPos, financial] =
+    await Promise.all([
+      getCustomer(id),
+      getCustomerHistory(id),
+      canManageCustomers(),
+      canDeleteCustomers(),
+      canManageRecords(),
+      canUsePos(),
+      getCustomerFinancialSummary(id),
+    ]);
 
   if (!customer || !history) notFound();
 
@@ -104,20 +112,20 @@ export default async function CustomerDetailPage({
         showDueOnly={showDueOnly}
       />
 
-      {canManage && (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle>Edit customer</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <CustomerForm action={boundUpdate} customer={customer} />
-            </CardContent>
-          </Card>
-          <div className="flex justify-end">
-            <DeleteCustomerButton customerId={id} customerName={fullName} />
-          </div>
-        </>
+      {canEdit && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Edit customer</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CustomerForm action={boundUpdate} customer={customer} />
+          </CardContent>
+        </Card>
+      )}
+      {canDelete && (
+        <div className="flex justify-end">
+          <DeleteCustomerButton customerId={id} customerName={fullName} />
+        </div>
       )}
     </div>
   );

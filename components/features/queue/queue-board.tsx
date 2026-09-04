@@ -56,6 +56,8 @@ type Props = {
   date: string;
   tokenCount: number;
   canManageChairs: boolean;
+  canOperate?: boolean;
+  canOpenDrawer?: boolean;
 };
 
 function currentTimeValue() {
@@ -70,6 +72,8 @@ export function QueueBoard({
   date,
   tokenCount,
   canManageChairs,
+  canOperate = true,
+  canOpenDrawer = false,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -185,20 +189,22 @@ export function QueueBoard({
           {filteredTokens.length !== tokenCount ? ` of ${tokenCount}` : ""} token
           {tokenCount === 1 ? "" : "s"} on {date}
         </div>
-        <Button
-          variant="outline"
-          disabled={drawerPending}
-          onClick={() =>
-            startDrawer(async () => {
-              await openDrawer("queue");
-            })
-          }
-        >
-          Open cash drawer
-        </Button>
+        {canOpenDrawer && (
+          <Button
+            variant="outline"
+            disabled={drawerPending}
+            onClick={() =>
+              startDrawer(async () => {
+                await openDrawer("queue");
+              })
+            }
+          >
+            Open cash drawer
+          </Button>
+        )}
       </div>
 
-      {isToday ? (
+      {canOperate && isToday ? (
         <form action={formAction} className="space-y-4 rounded-lg border p-4">
           <input type="hidden" name="token_date" value={date} />
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -286,9 +292,13 @@ export function QueueBoard({
           </div>
           {state.error && <p className="text-sm text-destructive">{state.error}</p>}
         </form>
-      ) : (
+      ) : canOperate ? (
         <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
           Viewing past/future queue. Switch to today&apos;s date to issue a new token.
+        </p>
+      ) : (
+        <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+          View-only queue. Ask reception to issue tokens or update status.
         </p>
       )}
 
@@ -303,7 +313,7 @@ export function QueueBoard({
           {(slice) => (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {slice.map((t) => (
-                <TokenCard key={t.id} token={t} queueDate={date} />
+                <TokenCard key={t.id} token={t} queueDate={date} canOperate={canOperate} />
               ))}
             </div>
           )}
@@ -313,7 +323,15 @@ export function QueueBoard({
   );
 }
 
-function TokenCard({ token, queueDate }: { token: Token; queueDate: string }) {
+function TokenCard({
+  token,
+  queueDate,
+  canOperate,
+}: {
+  token: Token;
+  queueDate: string;
+  canOperate: boolean;
+}) {
   const [pending, startTransition] = useTransition();
   const customer = token.customer as { phone: string | null; email: string | null } | null;
   const issuedAt = token.issued_at || token.created_at;
@@ -356,7 +374,7 @@ function TokenCard({ token, queueDate }: { token: Token; queueDate: string }) {
         <Button type="button" size="sm" variant="outline" disabled={pending} onClick={reprint}>
           {pending ? "…" : "Reprint"}
         </Button>
-        {token.status === "WAITING" && (
+        {canOperate && token.status === "WAITING" && (
           <Button
             size="sm"
             disabled={pending}
@@ -369,7 +387,7 @@ function TokenCard({ token, queueDate }: { token: Token; queueDate: string }) {
             Call
           </Button>
         )}
-        {token.status === "CALLED" && (
+        {canOperate && token.status === "CALLED" && (
           <Button
             size="sm"
             disabled={pending}
@@ -382,7 +400,7 @@ function TokenCard({ token, queueDate }: { token: Token; queueDate: string }) {
             Serve
           </Button>
         )}
-        {["CALLED", "SERVING"].includes(token.status) && (
+        {canOperate && ["CALLED", "SERVING"].includes(token.status) && (
           <Button
             size="sm"
             variant="outline"

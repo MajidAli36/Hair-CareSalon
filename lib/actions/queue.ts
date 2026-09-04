@@ -288,7 +288,7 @@ export async function getTodayQueue() {
 }
 
 export async function openDrawer(source = "manual"): Promise<ActionResult> {
-  const org = await requireMinimumRole("CASHIER");
+  const org = await requireMinimumRole("RECEPTIONIST");
   const result = await queueOpenCashDrawer(org.organizationId, { source });
   if (!result.ok) return { error: result.error };
   return { success: true };

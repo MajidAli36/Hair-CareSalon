@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { BRAND } from "@/lib/marketing/brand";
-import { SyncOpsCredit } from "@/components/print/syncops-credit";
+import { SYNCOPS } from "@/lib/print/syncops";
 
 export function SiteFooter() {
   const year = new Date().getFullYear();
@@ -39,6 +39,11 @@ export function SiteFooter() {
                 Login
               </Link>
             </li>
+            <li>
+              <Link href="/syncops" className="hover:text-white">
+                Built by SyncOps
+              </Link>
+            </li>
           </ul>
         </div>
 
@@ -66,7 +71,31 @@ export function SiteFooter() {
             <p>
               © {year} {BRAND.name}
             </p>
-            <SyncOpsCredit variant="dark" />
+            <p>
+              Platform by{" "}
+              <Link
+                href="/syncops"
+                className="text-white/55 underline-offset-2 hover:text-white/85 hover:underline"
+              >
+                {SYNCOPS.name}
+              </Link>
+              {" · "}
+              <a
+                href={`tel:${SYNCOPS.phone.replace(/\s/g, "")}`}
+                className="hover:text-white/70"
+              >
+                {SYNCOPS.phone}
+              </a>
+              {" · "}
+              <a
+                href={SYNCOPS.url}
+                target="_blank"
+                rel="noopener noreferrer me author"
+                className="hover:text-white/70"
+              >
+                {SYNCOPS.domain}
+              </a>
+            </p>
           </div>
           <div className="flex gap-6">
             <a

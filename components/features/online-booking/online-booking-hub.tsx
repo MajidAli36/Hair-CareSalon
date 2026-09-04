@@ -57,6 +57,10 @@ type OnlineBookingHubProps = {
   initialPendingCount: number;
   publicUrl: string;
   focus?: "deposits" | null;
+  canConfigure?: boolean;
+  canReviewDeposits?: boolean;
+  canRefundDeposits?: boolean;
+  canCollectPayment?: boolean;
 };
 
 function syncDateInUrl(date: string) {
@@ -75,6 +79,10 @@ export function OnlineBookingHub({
   initialPendingCount,
   publicUrl,
   focus = null,
+  canConfigure = false,
+  canReviewDeposits = false,
+  canRefundDeposits = false,
+  canCollectPayment = false,
 }: OnlineBookingHubProps) {
   const [date, setDate] = useState(initialDate);
   const [appointments, setAppointments] = useState(initialAppointments);
@@ -190,24 +198,29 @@ export function OnlineBookingHub({
         </div>
       </div>
 
-      <BookingAdvanceSettings settings={advanceSettings} />
+      {canConfigure && <BookingAdvanceSettings settings={advanceSettings} />}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Staff on public booking</CardTitle>
-          <CardDescription>
-            Enable stylists and set weekly hours. Customers only see enabled staff with schedules.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <StaffOnlineToggle staff={staff} onStaffChange={setStaff} />
-        </CardContent>
-      </Card>
+      {canConfigure ? (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle>Staff on public booking</CardTitle>
+              <CardDescription>
+                Enable stylists and set weekly hours. Customers only see enabled staff with
+                schedules.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <StaffOnlineToggle staff={staff} onStaffChange={setStaff} />
+            </CardContent>
+          </Card>
 
-      <StaffScheduleForm
-        staff={staff.map((s) => ({ id: s.id, full_name: s.full_name }))}
-        schedules={schedules}
-      />
+          <StaffScheduleForm
+            staff={staff.map((s) => ({ id: s.id, full_name: s.full_name }))}
+            schedules={schedules}
+          />
+        </>
+      ) : null}
 
       <div ref={appointmentsSectionRef} id="online-appointments" className="scroll-mt-24">
         <Tabs defaultValue="appointments" className="space-y-4">
@@ -264,6 +277,10 @@ export function OnlineBookingHub({
                     emptyMessage="No online appointments on this date."
                     onDepositResolved={handleDepositResolved}
                     onAppointmentCancelled={handleAppointmentCancelled}
+                    canReviewDeposits={canReviewDeposits}
+                    canRefundDeposits={canRefundDeposits}
+                    canCancelOnline={canReviewDeposits}
+                    canCollectPayment={canCollectPayment}
                   />
                 )}
               </CardContent>
@@ -282,7 +299,9 @@ export function OnlineBookingHub({
               <CardContent>
                 {staffForToday.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    No staff enabled for online booking yet. Enable someone above.
+                    {canConfigure
+                      ? "No staff enabled for online booking yet. Enable someone above."
+                      : "No staff enabled for online booking today."}
                   </p>
                 ) : (
                   <div className="rounded-lg border">

@@ -24,7 +24,7 @@ export async function createCustomer(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
-  const org = await requireMinimumRole("MANAGER");
+  const org = await requireMinimumRole("RECEPTIONIST");
   const parsed = customerSchema.safeParse({
     first_name: formData.get("first_name"),
     last_name: formData.get("last_name") || undefined,
@@ -68,7 +68,7 @@ export async function updateCustomer(
   _prev: ActionResult,
   formData: FormData
 ): Promise<ActionResult> {
-  const org = await requireMinimumRole("MANAGER");
+  const org = await requireMinimumRole("RECEPTIONIST");
   const parsed = customerSchema.safeParse({
     first_name: formData.get("first_name"),
     last_name: formData.get("last_name") || undefined,

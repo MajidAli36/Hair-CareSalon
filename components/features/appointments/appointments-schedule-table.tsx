@@ -52,6 +52,11 @@ type Props = {
   ) => void;
   onAppointmentCancelled?: (appointmentId: string) => void;
   onAppointmentUpdated?: (appointmentId: string, patch: Partial<AppointmentRow>) => void;
+  canReviewDeposits?: boolean;
+  canRefundDeposits?: boolean;
+  canCancelOnline?: boolean;
+  canCheckIn?: boolean;
+  canCollectPayment?: boolean;
 };
 
 export function AppointmentsScheduleTable({
@@ -62,6 +67,11 @@ export function AppointmentsScheduleTable({
   emptyAction,
   onDepositResolved,
   onAppointmentCancelled,
+  canReviewDeposits = true,
+  canRefundDeposits = true,
+  canCancelOnline = true,
+  canCheckIn = true,
+  canCollectPayment = true,
 }: Props) {
   return (
     <PaginatedList
@@ -91,6 +101,7 @@ export function AppointmentsScheduleTable({
             const settings = mode === "online" ? advanceSettings : undefined;
             const showManualPayment =
               mode === "staff" &&
+              canCollectPayment &&
               canCollectAdvance(deposits, serviceTotal, settings) &&
               !["CANCELLED", "COMPLETED", "NO_SHOW"].includes(a.status);
             const bookingNo = displayBookingNumber(a.booking_number, a.id);
@@ -126,6 +137,7 @@ export function AppointmentsScheduleTable({
 
                   <div className="flex flex-wrap gap-2">
                     {mode === "staff" &&
+                      canCheckIn &&
                       ["SCHEDULED", "CONFIRMED"].includes(a.status) && (
                         <CheckInButton
                           appointmentId={a.id}
@@ -137,6 +149,7 @@ export function AppointmentsScheduleTable({
                         />
                       )}
                     {mode === "online" &&
+                      canCancelOnline &&
                       !["CANCELLED", "COMPLETED", "NO_SHOW"].includes(a.status) && (
                         <CancelOnlineButton
                           appointmentId={a.id}
@@ -182,6 +195,8 @@ export function AppointmentsScheduleTable({
                         bookingNumber={bookingNo}
                         deposits={deposits}
                         onUpdated={onDepositResolved}
+                        canReview={canReviewDeposits}
+                        canRefund={canRefundDeposits}
                       />
                     )}
 

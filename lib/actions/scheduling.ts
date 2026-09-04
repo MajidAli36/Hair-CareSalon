@@ -224,7 +224,7 @@ export async function saveStaffSchedule(
 }
 
 export async function getOnlineBookingStaff() {
-  const org = await requireMinimumRole("MANAGER");
+  const org = await requireOrganization();
   const supabase = await createClient();
   const { data } = await supabase
     .from("staff")
@@ -255,7 +255,7 @@ export async function setStaffOnlineBooking(
 }
 
 export async function getStaffSchedulesForOrg() {
-  const org = await requireMinimumRole("MANAGER");
+  const org = await requireOrganization();
   const supabase = await createClient();
   const { data } = await supabase
     .from("staff_schedules")

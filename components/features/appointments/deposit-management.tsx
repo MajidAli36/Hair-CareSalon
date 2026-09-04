@@ -35,6 +35,8 @@ type DepositManagementProps = {
     depositId: string,
     status: "APPROVED" | "REJECTED" | "REFUNDED"
   ) => void;
+  canReview?: boolean;
+  canRefund?: boolean;
 };
 
 export function DepositManagement({
@@ -42,6 +44,8 @@ export function DepositManagement({
   bookingNumber,
   deposits,
   onUpdated,
+  canReview = true,
+  canRefund = true,
 }: DepositManagementProps) {
   if (!deposits.length) return null;
 
@@ -64,6 +68,8 @@ export function DepositManagement({
           bookingNumber={bookingNumber}
           deposit={deposit}
           onUpdated={onUpdated}
+          canReview={canReview}
+          canRefund={canRefund}
         />
       ))}
     </div>
@@ -110,11 +116,15 @@ function DepositRow({
   bookingNumber,
   deposit,
   onUpdated,
+  canReview,
+  canRefund,
 }: {
   appointmentId: string;
   bookingNumber?: string | null;
   deposit: DepositLine;
   onUpdated?: DepositManagementProps["onUpdated"];
+  canReview: boolean;
+  canRefund: boolean;
 }) {
   if (!deposit.id) return null;
 
@@ -135,41 +145,45 @@ function DepositRow({
           <p className="font-mono text-xs font-medium">Booking {bookingNumber}</p>
         ) : null}
         {deposit.notes && <p className="text-xs text-muted-foreground">{deposit.notes}</p>}
-        {deposit.proof_path ? (
+        {canReview && deposit.proof_path ? (
           <ViewProofButton depositId={deposit.id} />
         ) : deposit.payment_reference ? (
           <p className="text-xs text-muted-foreground">Ref: {deposit.payment_reference}</p>
         ) : (
-          <p className="text-xs text-muted-foreground">No screenshot on file</p>
+          <p className="text-xs text-muted-foreground">
+            {canReview ? "No screenshot on file" : "Awaiting front-desk review"}
+          </p>
         )}
-        <div className="flex gap-2">
-          <ConfirmAction
-            title={bookingNumber ? `Approve ${bookingNumber}?` : "Approve advance?"}
-            description={`Approve ${formatCurrency(deposit.amount)} after reviewing the payment screenshot? The booking will be confirmed.`}
-            confirmLabel="Approve"
-            pendingLabel="Approving…"
-            variant="default"
-            onConfirm={async () => {
-              const result = await approveAppointmentDeposit(deposit.id!);
-              if (!result.error) onUpdated?.(appointmentId, deposit.id!, "APPROVED");
-            }}
-          >
-            Approve
-          </ConfirmAction>
-          <ConfirmAction
-            title={bookingNumber ? `Reject ${bookingNumber}?` : "Reject advance?"}
-            description="Reject this payment proof? The booking will be cancelled."
-            confirmLabel="Reject"
-            pendingLabel="Rejecting…"
-            variant="outline"
-            onConfirm={async () => {
-              const result = await rejectAppointmentDeposit(deposit.id!);
-              if (!result.error) onUpdated?.(appointmentId, deposit.id!, "REJECTED");
-            }}
-          >
-            Reject
-          </ConfirmAction>
-        </div>
+        {canReview && (
+          <div className="flex gap-2">
+            <ConfirmAction
+              title={bookingNumber ? `Approve ${bookingNumber}?` : "Approve advance?"}
+              description={`Approve ${formatCurrency(deposit.amount)} after reviewing the payment screenshot? The booking will be confirmed.`}
+              confirmLabel="Approve"
+              pendingLabel="Approving…"
+              variant="default"
+              onConfirm={async () => {
+                const result = await approveAppointmentDeposit(deposit.id!);
+                if (!result.error) onUpdated?.(appointmentId, deposit.id!, "APPROVED");
+              }}
+            >
+              Approve
+            </ConfirmAction>
+            <ConfirmAction
+              title={bookingNumber ? `Reject ${bookingNumber}?` : "Reject advance?"}
+              description="Reject this payment proof? The booking will be cancelled."
+              confirmLabel="Reject"
+              pendingLabel="Rejecting…"
+              variant="outline"
+              onConfirm={async () => {
+                const result = await rejectAppointmentDeposit(deposit.id!);
+                if (!result.error) onUpdated?.(appointmentId, deposit.id!, "REJECTED");
+              }}
+            >
+              Reject
+            </ConfirmAction>
+          </div>
+        )}
       </div>
     );
   }
@@ -186,9 +200,9 @@ function DepositRow({
           ) : (
             <p className="text-xs text-muted-foreground">Held for checkout</p>
           )}
-          {deposit.proof_path && <ViewProofButton depositId={deposit.id} />}
+          {canReview && deposit.proof_path && <ViewProofButton depositId={deposit.id} />}
         </div>
-        {!deposit.applied_to_sale_id && (
+        {canRefund && !deposit.applied_to_sale_id && (
           <RefundDepositDialog
             depositId={deposit.id}
             amount={deposit.amount}

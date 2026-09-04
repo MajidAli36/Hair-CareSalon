@@ -4,6 +4,8 @@ import { requireOrganization } from "@/lib/auth/organization";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency, formatCustomerName, formatDateTime } from "@/lib/format";
 import { getLocalDateString, isoToLocalDateString } from "@/lib/dates/local";
+import { getOrgNavPermissions } from "@/lib/actions/role-permissions";
+import { canAccessPath } from "@/lib/permissions/nav";
 
 function safeVisitDay(iso: string | null | undefined): string {
   if (!iso) return getLocalDateString();
@@ -38,6 +40,7 @@ export type AppNotification = {
 export type AppNotificationsPayload = {
   badgeCount: number;
   items: AppNotification[];
+  canOpenOnlineBooking: boolean;
 };
 
 type CustomerBrief = { first_name: string; last_name: string | null; phone: string | null };
@@ -83,6 +86,13 @@ function asOne<T>(value: T | T[] | null | undefined): T | null {
 
 export async function getAppNotifications(): Promise<AppNotificationsPayload> {
   const org = await requireOrganization();
+  const overrides = await getOrgNavPermissions();
+  const canOpenOnlineBooking = canAccessPath(org.role, "/online-booking", overrides);
+
+  if (!canOpenOnlineBooking) {
+    return { badgeCount: 0, items: [], canOpenOnlineBooking: false };
+  }
+
   const supabase = await createClient();
 
   const since = new Date();
@@ -201,5 +211,6 @@ export async function getAppNotifications(): Promise<AppNotificationsPayload> {
   return {
     badgeCount: pendingItems.length,
     items,
+    canOpenOnlineBooking,
   };
 }

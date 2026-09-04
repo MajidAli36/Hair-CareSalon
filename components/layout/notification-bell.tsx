@@ -1,20 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { Bell, CalendarClock, CircleDollarSign, Loader2 } from "lucide-react";
 import {
   getAppNotifications,
   type AppNotification,
   type AppNotificationsPayload,
 } from "@/lib/actions/notifications";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
 const SEEN_KEY = "salon-notifications-seen-at";
@@ -37,8 +30,10 @@ export function NotificationBell() {
   const [payload, setPayload] = useState<AppNotificationsPayload>({
     badgeCount: 0,
     items: [],
+    canOpenOnlineBooking: false,
   });
   const [seenAt, setSeenAt] = useState<string | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(() => {
     startTransition(async () => {
@@ -67,6 +62,27 @@ export function NotificationBell() {
     };
   }, [load]);
 
+  useEffect(() => {
+    if (!open) return;
+
+    function onPointerDown(event: MouseEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
   const unseenInfoCount = payload.items.filter(
     (item) =>
       !item.actionable &&
@@ -86,7 +102,8 @@ export function NotificationBell() {
     }
   }
 
-  function handleOpenChange(next: boolean) {
+  function toggleOpen() {
+    const next = !open;
     setOpen(next);
     if (next) {
       load();
@@ -94,23 +111,17 @@ export function NotificationBell() {
     }
   }
 
-  /**
-   * Full page navigation — soft router.push + refresh was racing and leaving
-   * users on the previous URL with an error boundary.
-   */
-  function goTo(href: string) {
-    setOpen(false);
-    const target = href.startsWith("/") ? href : `/${href}`;
-    window.location.assign(target);
-  }
-
   return (
-    <DropdownMenu open={open} onOpenChange={handleOpenChange}>
-      <DropdownMenuTrigger
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        onClick={toggleOpen}
         className="relative inline-flex size-7 items-center justify-center rounded-lg outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
         aria-label={
           badgeCount > 0 ? `Notifications, ${badgeCount} unread` : "Notifications"
         }
+        aria-expanded={open}
+        aria-haspopup="menu"
       >
         <Bell className="size-4" />
         {badgeCount > 0 && (
@@ -118,63 +129,72 @@ export function NotificationBell() {
             {badgeLabel}
           </span>
         )}
-      </DropdownMenuTrigger>
+      </button>
 
-      <DropdownMenuContent align="end" className="w-[min(100vw-2rem,22rem)] p-0">
-        <div className="flex items-center justify-between gap-2 px-3 py-2.5">
-          <DropdownMenuLabel className="p-0 text-sm font-semibold text-foreground">
-            Notifications
-          </DropdownMenuLabel>
-          {pending && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
-        </div>
-        <DropdownMenuSeparator className="my-0" />
-
-        {payload.items.length === 0 ? (
-          <div className="px-3 py-8 text-center">
-            <Bell className="mx-auto size-8 text-muted-foreground/40" />
-            <p className="mt-3 text-sm font-medium text-foreground">You&apos;re all caught up</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              New online bookings and payment proofs show up here.
-            </p>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 z-50 mt-2 w-[min(100vw-2rem,22rem)] overflow-hidden rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10"
+        >
+          <div className="flex items-center justify-between gap-2 px-3 py-2.5">
+            <p className="text-sm font-semibold text-foreground">Notifications</p>
+            {pending && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
           </div>
-        ) : (
-          <div className="max-h-80 overflow-y-auto py-1">
-            {payload.items.map((item) => (
-              <NotificationRow key={item.id} item={item} onGo={goTo} />
-            ))}
-          </div>
-        )}
+          <div className="h-px bg-border" />
 
-        <DropdownMenuSeparator className="my-0" />
-        <div className="p-1.5">
-          <DropdownMenuItem
-            className="cursor-pointer justify-center text-xs font-medium text-primary"
-            onClick={() => goTo("/online-booking")}
-          >
-            Open online booking
-          </DropdownMenuItem>
+          {payload.items.length === 0 ? (
+            <div className="px-3 py-8 text-center">
+              <Bell className="mx-auto size-8 text-muted-foreground/40" />
+              <p className="mt-3 text-sm font-medium text-foreground">You&apos;re all caught up</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                New online bookings and payment proofs show up here.
+              </p>
+            </div>
+          ) : (
+            <div className="max-h-80 overflow-y-auto py-1">
+              {payload.items.map((item) => (
+                <NotificationRow key={item.id} item={item} onNavigate={() => setOpen(false)} />
+              ))}
+            </div>
+          )}
+
+          <div className="h-px bg-border" />
+          {payload.canOpenOnlineBooking && (
+            <div className="p-1.5">
+              <Link
+                href="/online-booking"
+                role="menuitem"
+                onClick={() => setOpen(false)}
+                className="flex w-full items-center justify-center rounded-md px-2 py-2 text-xs font-medium text-primary hover:bg-accent"
+              >
+                Open online booking
+              </Link>
+            </div>
+          )}
         </div>
-      </DropdownMenuContent>
-    </DropdownMenu>
+      )}
+    </div>
   );
 }
 
 function NotificationRow({
   item,
-  onGo,
+  onNavigate,
 }: {
   item: AppNotification;
-  onGo: (href: string) => void;
+  onNavigate: () => void;
 }) {
   const Icon = item.kind === "pending_payment" ? CircleDollarSign : CalendarClock;
 
   return (
-    <DropdownMenuItem
+    <Link
+      href={item.href}
+      role="menuitem"
+      onClick={onNavigate}
       className={cn(
-        "cursor-pointer items-start gap-3 rounded-none px-3 py-2.5 focus:bg-accent/70",
-        item.actionable && "bg-amber-50/60 focus:bg-amber-50"
+        "flex w-full gap-3 px-3 py-2.5 text-left transition-colors hover:bg-accent/70",
+        item.actionable && "bg-amber-50/60 hover:bg-amber-50"
       )}
-      onClick={() => onGo(item.href)}
     >
       <span
         className={cn(
@@ -201,6 +221,6 @@ function NotificationRow({
           </span>
         )}
       </span>
-    </DropdownMenuItem>
+    </Link>
   );
 }

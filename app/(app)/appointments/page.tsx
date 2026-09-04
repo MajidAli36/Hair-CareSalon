@@ -9,6 +9,12 @@ import { Label } from "@/components/ui/label";
 import { getApprovedDepositTotal, getPendingDepositTotal, sumServicePrices } from "@/lib/booking/pricing";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { getLocalDateString } from "@/lib/dates/local";
+import {
+  canApproveDeposits,
+  canManageRecords,
+  canOperateQueue,
+  canUsePos,
+} from "@/lib/auth/permissions";
 
 type PageProps = {
   searchParams: Promise<{ date?: string }>;
@@ -17,7 +23,14 @@ type PageProps = {
 export default async function AppointmentsPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const date = params.date ?? getLocalDateString();
-  const appointments = await getAppointments(date, { source: "STAFF" });
+  const [appointments, canReviewDeposits, canRefund, canCheckIn, canCollectPayment] =
+    await Promise.all([
+      getAppointments(date, { source: "STAFF" }),
+      canApproveDeposits(),
+      canManageRecords(),
+      canOperateQueue(),
+      canUsePos(),
+    ]);
 
   const formattedDate = formatDate(`${date}T12:00:00+05:00`, "long");
 
@@ -29,8 +42,8 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
     (sum, a) => sum + getApprovedDepositTotal(a.deposits ?? []),
     0
   );
-  const pendingCount = appointments.filter((a) =>
-    getPendingDepositTotal(a.deposits ?? []) > 0
+  const pendingCount = appointments.filter(
+    (a) => getPendingDepositTotal(a.deposits ?? []) > 0
   ).length;
 
   return (
@@ -105,6 +118,10 @@ export default async function AppointmentsPage({ searchParams }: PageProps) {
             mode="staff"
             emptyMessage="No reception appointments on this date."
             emptyAction={{ label: "Add appointment", href: "/appointments/new" }}
+            canReviewDeposits={canReviewDeposits}
+            canRefundDeposits={canRefund}
+            canCheckIn={canCheckIn}
+            canCollectPayment={canCollectPayment}
           />
         </CardContent>
       </Card>

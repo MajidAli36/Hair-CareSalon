@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createCustomer } from "@/lib/actions/customers";
-import { canManageRecords } from "@/lib/auth/permissions";
+import { canManageCustomers } from "@/lib/auth/permissions";
 import { CustomerForm } from "@/components/features/customers/customer-form";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,8 +13,8 @@ import {
 } from "@/components/ui/card";
 
 export default async function NewCustomerPage() {
-  const canManage = await canManageRecords();
-  if (!canManage) redirect("/customers");
+  const canEdit = await canManageCustomers();
+  if (!canEdit) redirect("/customers");
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">

@@ -223,4 +223,87 @@
       animation: none;
     }
   }
+
+  /* SyncOps unlisted studio page */
+  .syncops-studio {
+    --s-ink: #07090c;
+    --s-panel: #10141a;
+    --s-line: rgba(232, 224, 210, 0.12);
+    --s-mist: #e8e0d2;
+    --s-muted: #9aa3ad;
+    --s-accent: #d4b483;
+    --s-accent-deep: #a88955;
+    background:
+      radial-gradient(1200px 600px at 12% -10%, rgba(212, 180, 131, 0.14), transparent 55%),
+      radial-gradient(900px 500px at 90% 20%, rgba(80, 120, 140, 0.12), transparent 50%),
+      linear-gradient(180deg, #07090c 0%, #0c1016 45%, #07090c 100%);
+    color: var(--s-mist);
+    font-family: var(--font-studio-sans), ui-sans-serif, system-ui, sans-serif;
+  }
+
+  .syncops-studio .font-display {
+    font-family: var(--font-studio-display), ui-serif, Georgia, serif;
+  }
+
+  @keyframes s-fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(22px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes s-ken {
+    from {
+      transform: scale(1.08);
+    }
+    to {
+      transform: scale(1);
+    }
+  }
+
+  @keyframes s-glow {
+    0%,
+    100% {
+      opacity: 0.35;
+    }
+    50% {
+      opacity: 0.7;
+    }
+  }
+
+  .s-fade-up {
+    animation: s-fade-up 0.95s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .s-fade-up-delay-1 {
+    animation-delay: 0.14s;
+  }
+
+  .s-fade-up-delay-2 {
+    animation-delay: 0.28s;
+  }
+
+  .s-fade-up-delay-3 {
+    animation-delay: 0.42s;
+  }
+
+  .s-ken {
+    animation: s-ken 14s ease-out both;
+  }
+
+  .s-glow {
+    animation: s-glow 6s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .s-fade-up,
+    .s-ken,
+    .s-glow {
+      animation: none;
+    }
+  }
 }

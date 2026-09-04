@@ -2,7 +2,7 @@ export const SYNCOPS = {
   name: "SyncOps",
   url: "https://syncops.tech",
   domain: "syncops.tech",
-  email: "hello@syncops.tech",
+  email: "info@syncops.tech",
   phone: "+92301 8678319",
   phoneDisplay: "+92 301 8678319",
   label: "Built by SyncOps",

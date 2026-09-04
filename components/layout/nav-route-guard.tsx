@@ -21,15 +21,20 @@ export function NavRouteGuard({
 }: NavRouteGuardProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const allowed = canAccessPath(role, pathname, overrides);
 
   useEffect(() => {
-    if (!canAccessPath(role, pathname, overrides)) {
+    if (!allowed) {
       router.replace(landingPath);
     }
-  }, [role, pathname, overrides, landingPath, router]);
+  }, [allowed, landingPath, router]);
 
-  if (!canAccessPath(role, pathname, overrides)) {
-    return null;
+  if (!allowed) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted-foreground">
+        Redirecting…
+      </div>
+    );
   }
 
   return children;

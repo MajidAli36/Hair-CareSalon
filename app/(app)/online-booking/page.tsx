@@ -4,6 +4,12 @@ import {
   getPendingDepositCount,
 } from "@/lib/actions/appointments";
 import { getOnlineBookingStaff, getStaffSchedulesForOrg } from "@/lib/actions/scheduling";
+import {
+  canApproveDeposits,
+  canConfigureOnlineBooking,
+  canManageRecords,
+  canUsePos,
+} from "@/lib/auth/permissions";
 import { requireOrganization } from "@/lib/auth/organization";
 import { createClient } from "@/lib/supabase/server";
 import { OnlineBookingHub } from "@/components/features/online-booking/online-booking-hub";
@@ -30,12 +36,26 @@ export default async function OnlineBookingPage({ searchParams }: PageProps) {
     .eq("id", org.organizationId)
     .single();
 
-  const [appointments, staff, advanceSettings, pendingCount, schedules] = await Promise.all([
+  const [
+    appointments,
+    staff,
+    advanceSettings,
+    pendingCount,
+    schedules,
+    canConfigure,
+    canReviewDeposits,
+    canRefund,
+    canCollectPayment,
+  ] = await Promise.all([
     getAppointments(initialDate, { source: "ONLINE" }).catch(() => []),
     getOnlineBookingStaff().catch(() => []),
     getBookingAdvanceSettings().catch(() => null),
     getPendingDepositCount().catch(() => 0),
     getStaffSchedulesForOrg().catch(() => []),
+    canConfigureOnlineBooking(),
+    canApproveDeposits(),
+    canManageRecords(),
+    canUsePos(),
   ]);
 
   const publicUrl = `/book/${orgRow?.slug ?? "hair-salon"}`;
@@ -51,6 +71,10 @@ export default async function OnlineBookingPage({ searchParams }: PageProps) {
       initialPendingCount={pendingCount}
       publicUrl={publicUrl}
       focus={focus}
+      canConfigure={canConfigure}
+      canReviewDeposits={canReviewDeposits}
+      canRefundDeposits={canRefund}
+      canCollectPayment={canCollectPayment}
     />
   );
 }

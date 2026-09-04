@@ -1,22 +1,34 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Calendar, Plus, ShoppingCart, UserPlus, Package, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { canAccessPath, type NavPermissionsConfig } from "@/lib/permissions/nav";
+import type { MemberRole } from "@/types";
 
 const actions = [
   { label: "New Appointment", href: "/appointments/new", icon: Calendar, shortcut: "A" },
   { label: "New Customer", href: "/customers/new", icon: UserPlus, shortcut: "C" },
   { label: "New Sale", href: "/pos", icon: ShoppingCart, shortcut: "S" },
   { label: "Add Product", href: "/products", icon: Package, shortcut: "P" },
-];
+] as const;
 
-export function QuickActionFab() {
+type QuickActionFabProps = {
+  memberRole: MemberRole;
+  navOverrides: NavPermissionsConfig;
+};
+
+export function QuickActionFab({ memberRole, navOverrides }: QuickActionFabProps) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
+
+  const visibleActions = useMemo(
+    () => actions.filter((action) => canAccessPath(memberRole, action.href, navOverrides)),
+    [memberRole, navOverrides]
+  );
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -30,20 +42,22 @@ export function QuickActionFab() {
         p: "/products",
       };
       const href = map[e.key.toLowerCase()];
-      if (href) {
+      if (href && canAccessPath(memberRole, href, navOverrides)) {
         e.preventDefault();
         router.push(href);
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [router]);
+  }, [router, memberRole, navOverrides]);
+
+  if (visibleActions.length === 0) return null;
 
   return (
     <div className="fixed right-4 bottom-4 z-40 flex flex-col items-end gap-2 sm:right-6 sm:bottom-6">
       {open && (
         <div className="mb-1 flex flex-col gap-1.5 rounded-xl border border-border bg-card p-2 shadow-lg animate-in fade-in slide-in-from-bottom-2 duration-200">
-          {actions.map((action) => (
+          {visibleActions.map((action) => (
             <Link
               key={action.href}
               href={action.href}

@@ -876,7 +876,7 @@ export async function createOnlineBooking(input: {
 }
 
 export async function cancelOnlineAppointment(appointmentId: string): Promise<ActionResult> {
-  const org = await requireMinimumRole("MANAGER");
+  const org = await requireMinimumRole("RECEPTIONIST");
   const supabase = await createClient();
 
   const { data: appt, error: fetchErr } = await supabase
@@ -934,7 +934,7 @@ export async function getOrgBySlug(slug: string) {
 }
 
 export async function getBookingAdvanceSettings() {
-  const org = await requireMinimumRole("MANAGER");
+  const org = await requireOrganization();
   const supabase = await createClient();
   const { data } = await supabase
     .from("organizations")
@@ -982,7 +982,7 @@ export async function getPendingDepositCount(): Promise<number> {
 }
 
 export async function approveAppointmentDeposit(depositId: string): Promise<ActionResult> {
-  const org = await requireMinimumRole("MANAGER");
+  const org = await requireMinimumRole("RECEPTIONIST");
   const supabase = await createClient();
   const {
     data: { user },
@@ -1018,7 +1018,7 @@ export async function approveAppointmentDeposit(depositId: string): Promise<Acti
 }
 
 export async function rejectAppointmentDeposit(depositId: string): Promise<ActionResult> {
-  const org = await requireMinimumRole("MANAGER");
+  const org = await requireMinimumRole("RECEPTIONIST");
   const supabase = await createClient();
 
   const { data: deposit } = await supabase
@@ -1054,7 +1054,7 @@ export async function rejectAppointmentDeposit(depositId: string): Promise<Actio
 export async function getDepositProofUrl(
   depositId: string
 ): Promise<{ url?: string; error?: string }> {
-  const org = await requireMinimumRole("MANAGER");
+  const org = await requireMinimumRole("RECEPTIONIST");
   const supabase = await createClient();
 
   const { data: deposit } = await supabase

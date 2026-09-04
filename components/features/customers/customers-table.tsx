@@ -22,19 +22,26 @@ const PAGE_SIZE = 10;
 
 type CustomersTableProps = {
   customers: Customer[];
-  canManage?: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
 };
 
-export function CustomersTable({ customers, canManage = false }: CustomersTableProps) {
+export function CustomersTable({
+  customers,
+  canEdit = false,
+  canDelete = false,
+}: CustomersTableProps) {
   const { page, setPage, slice } = usePagination(customers, PAGE_SIZE);
 
   if (customers.length === 0) {
     return (
       <div className="rounded-lg border border-dashed p-12 text-center">
         <p className="text-muted-foreground">No customers found.</p>
-        <Button className="mt-4" render={<Link href="/customers/new" />}>
-          Add your first customer
-        </Button>
+        {canEdit && (
+          <Button className="mt-4" render={<Link href="/customers/new" />}>
+            Add your first customer
+          </Button>
+        )}
       </div>
     );
   }
@@ -81,7 +88,7 @@ export function CustomersTable({ customers, canManage = false }: CustomersTableP
                       <Eye className="size-3.5" />
                       View
                     </Button>
-                    {canManage && (
+                    {canDelete && (
                       <ConfirmAction
                         title="Delete customer?"
                         description={`This will remove ${name} from your customer list.`}

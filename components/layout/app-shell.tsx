@@ -46,7 +46,7 @@ export function AppShell({
           landingPath={landingPath}
         >
           <div className="flex-1 overflow-x-hidden p-4 sm:p-6 lg:p-8">{children}</div>
-          <QuickActionFab />
+          <QuickActionFab memberRole={memberRole} navOverrides={navOverrides} />
         </NavRouteGuard>
       </SidebarInset>
     </SidebarProvider>

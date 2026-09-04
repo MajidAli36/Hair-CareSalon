@@ -2,7 +2,11 @@ import { getQueueByDate } from "@/lib/actions/queue";
 import { getCustomers } from "@/lib/actions/customers";
 import { getStaff } from "@/lib/actions/staff";
 import { getChairs } from "@/lib/actions/chairs";
-import { canManageRecords } from "@/lib/auth/permissions";
+import {
+  canManageRecords,
+  canOpenCashDrawer,
+  canOperateQueue,
+} from "@/lib/auth/permissions";
 import { QueueBoard } from "@/components/features/queue/queue-board";
 import { getLocalDateString } from "@/lib/dates/local";
 import Link from "next/link";
@@ -15,13 +19,16 @@ export default async function QueuePage({ searchParams }: PageProps) {
   const params = await searchParams;
   const date = params.date ?? getLocalDateString();
 
-  const [tokens, customers, staff, chairs, canManage] = await Promise.all([
-    getQueueByDate(date),
-    getCustomers(),
-    getStaff(),
-    getChairs(),
-    canManageRecords(),
-  ]);
+  const [tokens, customers, staff, chairs, canManage, canOperate, canDrawer] =
+    await Promise.all([
+      getQueueByDate(date),
+      getCustomers(),
+      getStaff(),
+      getChairs(),
+      canManageRecords(),
+      canOperateQueue(),
+      canOpenCashDrawer(),
+    ]);
 
   const activeStaff = staff
     .filter((s) => s.is_active)
@@ -53,6 +60,8 @@ export default async function QueuePage({ searchParams }: PageProps) {
         date={date}
         tokenCount={tokens.length}
         canManageChairs={canManage}
+        canOperate={canOperate}
+        canOpenDrawer={canDrawer}
       />
     </div>
   );

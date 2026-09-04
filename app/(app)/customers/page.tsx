@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { getCustomers } from "@/lib/actions/customers";
-import { canManageRecords } from "@/lib/auth/permissions";
+import { canDeleteCustomers, canManageCustomers } from "@/lib/auth/permissions";
 import { CustomerSearch } from "@/components/features/customers/customer-search";
 import { CustomersTable } from "@/components/features/customers/customers-table";
 import { Button } from "@/components/ui/button";
@@ -13,9 +13,10 @@ type CustomersPageProps = {
 
 export default async function CustomersPage({ searchParams }: CustomersPageProps) {
   const { q } = await searchParams;
-  const [customers, canManage] = await Promise.all([
+  const [customers, canEdit, canDelete] = await Promise.all([
     getCustomers(q),
-    canManageRecords(),
+    canManageCustomers(),
+    canDeleteCustomers(),
   ]);
 
   return (
@@ -27,7 +28,7 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
             Manage your salon&apos;s customer records.
           </p>
         </div>
-        {canManage && (
+        {canEdit && (
           <Button render={<Link href="/customers/new" />}>Add customer</Button>
         )}
       </div>
@@ -36,7 +37,7 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
         <CustomerSearch />
       </Suspense>
 
-      <CustomersTable customers={customers} canManage={canManage} />
+      <CustomersTable customers={customers} canEdit={canEdit} canDelete={canDelete} />
     </div>
   );
 }
