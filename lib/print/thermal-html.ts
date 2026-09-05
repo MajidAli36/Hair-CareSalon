@@ -2,12 +2,13 @@ import { BRAND } from "@/lib/marketing/brand";
 import { SYNCOPS } from "@/lib/print/syncops";
 import { formatDate, formatTime } from "@/lib/format";
 
-/** Thermal paper presets — content width leaves a printer-safe margin. */
+/** Thermal paper presets — content width leaves a printer-safe margin on both sides. */
 export type ThermalPaperWidth = "80mm" | "58mm";
 
 const PAPER = {
-  "80mm": { page: "80mm", content: "76mm" },
-  "58mm": { page: "58mm", content: "50mm" },
+  // Keep content well inside printable area — many 80mm heads clip ~3–5mm on the right.
+  "80mm": { page: "80mm", content: "70mm" },
+  "58mm": { page: "58mm", content: "48mm" },
 } as const;
 
 /**
@@ -82,10 +83,12 @@ function thermalStyles(paper: ThermalPaperWidth): string {
     height: auto;
     min-height: 0;
     margin: 0 auto;
-    padding: 2mm 1.5mm 3mm;
+    /* Extra right padding — thermal drivers often crop the trailing edge */
+    padding: 2mm 2.5mm 3mm 1.5mm;
     background: #fff;
     color: #000;
     box-sizing: border-box;
+    overflow-x: hidden;
   }
 
   .mono {
@@ -118,6 +121,9 @@ function thermalStyles(paper: ThermalPaperWidth): string {
     font-size: 11px;
     font-weight: 700;
     color: #000;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   /* ── Title ── */
@@ -147,10 +153,11 @@ function thermalStyles(paper: ThermalPaperWidth): string {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    gap: 8px;
+    gap: 6px;
     margin: 3px 0;
     font-size: 12px;
     color: #000;
+    max-width: 100%;
   }
   /* NEVER use gray on thermal — printers dither it into faint dots */
   .meta-row .k {
@@ -159,10 +166,12 @@ function thermalStyles(paper: ThermalPaperWidth): string {
     color: #000;
   }
   .meta-row .v {
+    min-width: 0;
     text-align: right;
     font-weight: 700;
     color: #000;
     word-break: break-word;
+    overflow-wrap: anywhere;
   }
 
   /* ── Items ── */
@@ -176,7 +185,7 @@ function thermalStyles(paper: ThermalPaperWidth): string {
   }
   .items-head {
     display: grid;
-    grid-template-columns: 1fr 32px 58px;
+    grid-template-columns: minmax(0, 1fr) 28px 52px;
     gap: 2px;
     font-size: 11px;
     font-weight: 900;
@@ -184,6 +193,7 @@ function thermalStyles(paper: ThermalPaperWidth): string {
     padding-bottom: 3px;
     border-bottom: 2px solid #000;
     margin-bottom: 3px;
+    max-width: 100%;
   }
   .items-head .col-qty,
   .items-head .col-price {
@@ -192,19 +202,22 @@ function thermalStyles(paper: ThermalPaperWidth): string {
   .item {
     padding: 4px 0;
     border-bottom: 1px solid #000;
+    max-width: 100%;
   }
   .item:last-child {
     border-bottom: none;
   }
   .item-top {
     display: grid;
-    grid-template-columns: 1fr 32px 58px;
+    grid-template-columns: minmax(0, 1fr) 28px 52px;
     gap: 2px;
     align-items: start;
     font-size: 12px;
     color: #000;
+    max-width: 100%;
   }
   .item-name {
+    min-width: 0;
     font-weight: 700;
     word-break: break-word;
     overflow-wrap: anywhere;
@@ -239,18 +252,23 @@ function thermalStyles(paper: ThermalPaperWidth): string {
   .total-row {
     display: flex;
     justify-content: space-between;
-    gap: 8px;
+    gap: 6px;
     margin: 3px 0;
     font-size: 12px;
     font-weight: 700;
     color: #000;
+    max-width: 100%;
   }
   .total-row.muted .k,
   .total-row.muted .v {
     color: #000;
     font-weight: 700;
   }
+  .total-row .k {
+    min-width: 0;
+  }
   .total-row .v {
+    flex-shrink: 0;
     text-align: right;
     font-variant-numeric: tabular-nums;
   }
@@ -273,13 +291,15 @@ function thermalStyles(paper: ThermalPaperWidth): string {
   .pay-row {
     display: flex;
     justify-content: space-between;
-    gap: 8px;
+    gap: 6px;
     margin: 3px 0;
     font-size: 12px;
     font-weight: 700;
     color: #000;
+    max-width: 100%;
   }
   .pay-row .v {
+    flex-shrink: 0;
     font-weight: 900;
     text-align: right;
     font-variant-numeric: tabular-nums;
@@ -336,7 +356,7 @@ function thermalStyles(paper: ThermalPaperWidth): string {
   /* Narrow paper: tighten columns */
   html[data-paper="58mm"] .items-head,
   html[data-paper="58mm"] .item-top {
-    grid-template-columns: 1fr 28px 50px;
+    grid-template-columns: minmax(0, 1fr) 24px 46px;
   }
   html[data-paper="58mm"] .biz-name { font-size: 15px; }
   html[data-paper="58mm"] .doc-type-label { font-size: 12px; }
@@ -377,10 +397,11 @@ function thermalStyles(paper: ThermalPaperWidth): string {
       height: auto !important;
       min-height: 0 !important;
       margin: 0 auto !important;
-      padding: 1.5mm 1mm 2.5mm !important;
+      padding: 1.5mm 2.5mm 2.5mm 1.5mm !important;
       background: #fff !important;
       color: #000 !important;
       box-shadow: none !important;
+      overflow-x: hidden !important;
     }
 
     /* Force every text node black — kills leftover gray from any rule */
