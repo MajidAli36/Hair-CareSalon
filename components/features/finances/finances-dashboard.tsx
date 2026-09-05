@@ -147,7 +147,12 @@ export function FinancesDashboard({
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <FlowItem label="Money in" value={summary.totalInflow} variant="in" detail="Sales + advances" />
+            <FlowItem
+              label="Money in"
+              value={summary.totalInflow}
+              variant="in"
+              detail="Cash/card sales + advances"
+            />
             <FlowItem label="Money out" value={summary.totalOutflow} variant="out" detail="Expenses + staff + product COGS" />
             <FlowItem label="Net cash flow" value={summary.netCashFlow} variant={summary.netCashFlow >= 0 ? "profit" : "loss"} />
             <FlowItem label="Net profit" value={summary.netProfit} variant={summary.netProfit >= 0 ? "profit" : "loss"} detail="Sales − all costs − COGS" />

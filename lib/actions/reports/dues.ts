@@ -147,16 +147,24 @@ export async function getDuesReport(from?: string, to?: string): Promise<DuesRep
   const [{ data: todayPays }, { data: monthPays }] = await Promise.all([
     supabase
       .from("payments")
-      .select("amount")
+      .select("amount, reference")
       .eq("organization_id", ctx.organizationId)
       .gte("paid_at", startOfLocalDay(today).toISOString())
       .lte("paid_at", endOfLocalDay(today).toISOString()),
     supabase
       .from("payments")
-      .select("amount")
+      .select("amount, reference")
       .eq("organization_id", ctx.organizationId)
       .gte("paid_at", startOfLocalDay(monthStart).toISOString()),
   ]);
+
+  const sumTender = (rows: { amount: number | string; reference: string | null }[] | null) =>
+    roundMoney(
+      (rows ?? []).reduce((a, p) => {
+        if (p.reference === "APPOINTMENT_DEPOSIT") return a;
+        return a + Number(p.amount);
+      }, 0)
+    );
 
   return {
     from: ctx.from,
@@ -166,12 +174,8 @@ export async function getDuesReport(from?: string, to?: string): Promise<DuesRep
       totalOutstanding: roundMoney(totalOutstanding),
       customersWithDue: customers.size,
       invoicesWithDue: ledger.length,
-      collectedToday: roundMoney(
-        (todayPays ?? []).reduce((a, p) => a + Number(p.amount), 0)
-      ),
-      collectedThisMonth: roundMoney(
-        (monthPays ?? []).reduce((a, p) => a + Number(p.amount), 0)
-      ),
+      collectedToday: sumTender(todayPays),
+      collectedThisMonth: sumTender(monthPays),
       overdueAmount: roundMoney(overdueAmount),
     },
     aging: [...agingMap.entries()].map(([label, v]) => ({

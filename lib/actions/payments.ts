@@ -237,6 +237,7 @@ export async function getCustomerDueInvoices(customerId: string) {
     .eq("organization_id", org.organizationId)
     .eq("customer_id", customerId)
     .in("status", ["COMPLETED", "AMENDED"])
+    .is("deleted_at", null)
     .gt("amount_due", 0)
     .order("completed_at", { ascending: true });
 
@@ -267,7 +268,8 @@ export async function getCustomerFinancialSummary(customerId: string) {
     .select("id, total, discount, amount_paid, amount_refunded, amount_due, status")
     .eq("organization_id", org.organizationId)
     .eq("customer_id", customerId)
-    .in("status", ["COMPLETED", "AMENDED", "REFUNDED"]);
+    .in("status", ["COMPLETED", "AMENDED", "REFUNDED"])
+    .is("deleted_at", null);
 
   if (error) throw new Error(error.message);
 
@@ -275,7 +277,11 @@ export async function getCustomerFinancialSummary(customerId: string) {
     (s) => s.status === "COMPLETED" || s.status === "AMENDED"
   );
   const totalPurchases = posted.reduce((s, r) => s + Number(r.total), 0);
-  const totalPaid = (sales ?? []).reduce((s, r) => s + Number(r.amount_paid), 0);
+  // Net cash/credit applied on open invoices (paid minus refunds)
+  const totalPaid = posted.reduce(
+    (s, r) => s + Number(r.amount_paid) - Number(r.amount_refunded),
+    0
+  );
   const totalRefunds = (sales ?? []).reduce((s, r) => s + Number(r.amount_refunded), 0);
   const outstandingDue = posted.reduce((s, r) => s + Number(r.amount_due), 0);
   const totalDiscounts = posted.reduce((s, r) => s + Number(r.discount), 0);
@@ -319,6 +325,7 @@ export async function getCustomerStatement(
     .eq("organization_id", org.organizationId)
     .eq("customer_id", customerId)
     .in("status", ["COMPLETED", "AMENDED", "VOID", "REFUNDED"])
+    .is("deleted_at", null)
     .order("completed_at", { ascending: true });
 
   const saleIds = (sales ?? []).map((s) => s.id);

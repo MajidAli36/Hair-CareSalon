@@ -36,8 +36,8 @@ export function SalesTab({ data }: { data: SalesReport }) {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard label="Completed sales" value={String(k.completedSales.current)} compare={k.completedSales} />
         <KpiCard label="Voided sales" value={String(k.voidedSales.current)} compare={k.voidedSales} invertTrend />
-        <KpiCard label="Gross sales" value={formatCurrency(k.grossSales.current)} compare={k.grossSales} hint="Subtotals" />
-        <KpiCard label="Net sales" value={formatCurrency(k.netSales.current)} compare={k.netSales} hint="Ticket totals" />
+        <KpiCard label="Gross sales" value={formatCurrency(k.grossSales.current)} compare={k.grossSales} hint="Sum of subtotals" />
+        <KpiCard label="Ticket revenue" value={formatCurrency(k.netSales.current)} compare={k.netSales} hint="After discount + tax" />
         <KpiCard label="Discounts" value={formatCurrency(k.discounts.current)} compare={k.discounts} invertTrend />
         <KpiCard label="Avg sale" value={formatCurrency(k.aov.current)} compare={k.aov} />
         <KpiCard label="Items sold" value={String(k.itemsSold.current)} compare={k.itemsSold} />

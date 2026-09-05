@@ -136,6 +136,7 @@ export function StaffHub({
                         <TableHead>App login</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Online booking</TableHead>
+                        <TableHead className="text-right"> </TableHead>
                         {canManage && <TableHead className="text-right">Actions</TableHead>}
                       </TableRow>
                     </TableHeader>
@@ -182,6 +183,16 @@ export function StaffHub({
                               >
                                 {s.online_booking_enabled ? "Visible on /book" : "Hidden"}
                               </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                render={<Link href={`/staff/${s.id}`} />}
+                              >
+                                View
+                              </Button>
                             </TableCell>
                             {canManage && (
                               <TableCell className="text-right">

@@ -300,6 +300,7 @@ export async function getAppointmentsForPos(): Promise<PosAppointment[]> {
       .eq("organization_id", org.organizationId)
       .gte("scheduled_at", dayStart)
       .lte("scheduled_at", dayEnd)
+      .is("deleted_at", null)
       .not("status", "in", '("COMPLETED","CANCELLED","NO_SHOW")')
       .order("scheduled_at"),
     supabase
@@ -481,6 +482,7 @@ export async function getAppointments(
       services:appointment_services(service_name, price, duration_minutes)
     `)
     .eq("organization_id", org.organizationId)
+    .is("deleted_at", null)
     .order("scheduled_at");
 
   if (date) {
@@ -881,20 +883,42 @@ export async function cancelOnlineAppointment(appointmentId: string): Promise<Ac
 
   const { data: appt, error: fetchErr } = await supabase
     .from("appointments")
-    .select("id, source")
+    .select("id, source, scheduled_at, customer_id, status")
     .eq("id", appointmentId)
     .eq("organization_id", org.organizationId)
+    .is("deleted_at", null)
     .single();
 
   if (fetchErr || !appt) return { error: "Appointment not found" };
   if (appt.source !== "ONLINE") return { error: "Only online appointments can be cancelled here" };
 
+  const { resolveSoftDeleteActor, softDeletePatch } = await import("@/lib/db/soft-delete");
+  const actor = await resolveSoftDeleteActor();
+  const soft = softDeletePatch(actor);
+
   const { error } = await supabase
     .from("appointments")
-    .update({ status: "CANCELLED" })
-    .eq("id", appointmentId);
+    .update({ status: "CANCELLED", ...soft })
+    .eq("id", appointmentId)
+    .eq("organization_id", org.organizationId);
 
   if (error) return { error: error.message };
+
+  const { writeAuditLog } = await import("@/lib/audit/log");
+  await writeAuditLog({
+    organizationId: org.organizationId,
+    userId: actor.userId,
+    actorRole: actor.role,
+    actorEmail: actor.email,
+    action: "appointment.cancel",
+    entityType: "appointment",
+    entityId: appointmentId,
+    metadata: {
+      summary: "Cancelled online appointment",
+      before: appt as unknown as Record<string, unknown>,
+    },
+  });
+
   revalidatePath("/appointments");
   return { success: true };
 }
@@ -1040,11 +1064,31 @@ export async function rejectAppointmentDeposit(depositId: string): Promise<Actio
 
   if (error) return { error: error.message };
 
+  const { resolveSoftDeleteActor, softDeletePatch } = await import("@/lib/db/soft-delete");
+  const actor = await resolveSoftDeleteActor();
+  const soft = softDeletePatch(actor);
+
   await supabase
     .from("appointments")
-    .update({ status: "CANCELLED" })
+    .update({ status: "CANCELLED", ...soft })
     .eq("id", deposit.appointment_id)
     .eq("organization_id", org.organizationId);
+
+  const { writeAuditLog } = await import("@/lib/audit/log");
+  await writeAuditLog({
+    organizationId: org.organizationId,
+    userId: actor.userId,
+    actorRole: actor.role,
+    actorEmail: actor.email,
+    action: "appointment.cancel",
+    entityType: "appointment",
+    entityId: deposit.appointment_id,
+    metadata: {
+      summary: "Cancelled appointment after deposit rejection",
+      reason: "deposit_rejected",
+      deposit_id: depositId,
+    },
+  });
 
   revalidatePath("/appointments");
   revalidatePath("/online-booking");

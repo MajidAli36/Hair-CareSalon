@@ -59,14 +59,28 @@ export async function createCategory(
 export async function deleteCategory(id: string): Promise<ActionResult> {
   const org = await requireMinimumRole("MANAGER");
   const supabase = await createClient();
-
-  const { error } = await supabase
+  const { data: row } = await supabase
     .from("service_categories")
-    .delete()
+    .select("id, name")
     .eq("id", id)
-    .eq("organization_id", org.organizationId);
+    .eq("organization_id", org.organizationId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!row) return { error: "Category not found" };
 
-  if (error) return { error: error.message };
+  const { resolveSoftDeleteActor, softDeleteEntity } = await import("@/lib/db/soft-delete");
+  const actor = await resolveSoftDeleteActor();
+  const result = await softDeleteEntity({
+    table: "service_categories",
+    id,
+    organizationId: org.organizationId,
+    actor,
+    action: "service_category.delete",
+    entityType: "service_category",
+    summary: `Deleted service category ${row.name}`,
+    before: row as unknown as Record<string, unknown>,
+  });
+  if (result.error) return { error: result.error };
   revalidatePath("/services");
   revalidatePath("/");
   revalidatePath("/book");
@@ -156,14 +170,29 @@ export async function updateService(
 export async function deleteService(id: string): Promise<ActionResult> {
   const org = await requireMinimumRole("MANAGER");
   const supabase = await createClient();
-
-  const { error } = await supabase
+  const { data: row } = await supabase
     .from("services")
-    .delete()
+    .select("id, name, price")
     .eq("id", id)
-    .eq("organization_id", org.organizationId);
+    .eq("organization_id", org.organizationId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!row) return { error: "Service not found" };
 
-  if (error) return { error: error.message };
+  const { resolveSoftDeleteActor, softDeleteEntity } = await import("@/lib/db/soft-delete");
+  const actor = await resolveSoftDeleteActor();
+  const result = await softDeleteEntity({
+    table: "services",
+    id,
+    organizationId: org.organizationId,
+    actor,
+    action: "service.delete",
+    entityType: "service",
+    summary: `Deleted service ${row.name}`,
+    before: row as unknown as Record<string, unknown>,
+    extraPatch: { is_active: false },
+  });
+  if (result.error) return { error: result.error };
   revalidatePath("/services");
   revalidatePath("/");
   revalidatePath("/book");
@@ -228,14 +257,29 @@ export async function createPackage(
 export async function deletePackage(id: string): Promise<ActionResult> {
   const org = await requireMinimumRole("MANAGER");
   const supabase = await createClient();
-
-  const { error } = await supabase
+  const { data: row } = await supabase
     .from("packages")
-    .delete()
+    .select("id, name, price")
     .eq("id", id)
-    .eq("organization_id", org.organizationId);
+    .eq("organization_id", org.organizationId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!row) return { error: "Package not found" };
 
-  if (error) return { error: error.message };
+  const { resolveSoftDeleteActor, softDeleteEntity } = await import("@/lib/db/soft-delete");
+  const actor = await resolveSoftDeleteActor();
+  const result = await softDeleteEntity({
+    table: "packages",
+    id,
+    organizationId: org.organizationId,
+    actor,
+    action: "package.delete",
+    entityType: "package",
+    summary: `Deleted package ${row.name}`,
+    before: row as unknown as Record<string, unknown>,
+    extraPatch: { is_active: false },
+  });
+  if (result.error) return { error: result.error };
   revalidatePath("/services");
   revalidatePath("/");
   revalidatePath("/book");
@@ -250,6 +294,7 @@ export async function getServiceCategories() {
     .from("service_categories")
     .select("*")
     .eq("organization_id", org.organizationId)
+    .is("deleted_at", null)
     .order("sort_order")
     .order("name");
 
@@ -265,6 +310,7 @@ export async function getServices() {
     .from("services")
     .select("*, category:service_categories(id, name)")
     .eq("organization_id", org.organizationId)
+    .is("deleted_at", null)
     .order("name");
 
   if (error) throw new Error(error.message);
@@ -287,6 +333,7 @@ export async function getPackages() {
       )
     `)
     .eq("organization_id", org.organizationId)
+    .is("deleted_at", null)
     .order("name");
 
   if (error) throw new Error(error.message);

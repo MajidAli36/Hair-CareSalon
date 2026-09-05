@@ -49,6 +49,13 @@ export async function canUseWhatsApp() {
   return hasMinimumRole(org.role, "RECEPTIONIST");
 }
 
+/** Collect customer feedback ratings */
+export async function canUseFeedback() {
+  const org = await getActiveOrganization();
+  if (!org) return false;
+  return hasMinimumRole(org.role, "RECEPTIONIST");
+}
+
 /** Issue tokens and update queue status */
 export async function canOperateQueue() {
   const org = await getActiveOrganization();

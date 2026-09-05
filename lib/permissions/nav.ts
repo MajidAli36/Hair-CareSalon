@@ -20,6 +20,7 @@ export const NAV_KEYS = [
   "reports",
   "finances",
   "whatsapp",
+  "feedback",
   "settings",
 ] as const;
 
@@ -42,6 +43,7 @@ export const NAV_KEY_LABELS: Record<NavKey, string> = {
   reports: "Reports",
   finances: "Finances",
   whatsapp: "WhatsApp",
+  feedback: "Feedback",
   settings: "Settings",
 };
 
@@ -63,6 +65,7 @@ export const HREF_TO_NAV_KEY: Record<string, NavKey> = {
   "/reports": "reports",
   "/finances": "finances",
   "/whatsapp": "whatsapp",
+  "/feedback": "feedback",
   "/settings": "settings",
 };
 
@@ -99,6 +102,7 @@ export const DEFAULT_NAV_BY_ROLE: Record<MemberRole, Record<NavKey, boolean>> = 
     reports: false,
     finances: false,
     whatsapp: false,
+    feedback: true,
     settings: false,
   },
   RECEPTIONIST: {
@@ -108,6 +112,7 @@ export const DEFAULT_NAV_BY_ROLE: Record<MemberRole, Record<NavKey, boolean>> = 
     online_booking: true,
     queue: true,
     whatsapp: true,
+    feedback: true,
     pos: false,
     sales: false,
     services: false,
@@ -137,6 +142,7 @@ export const DEFAULT_NAV_BY_ROLE: Record<MemberRole, Record<NavKey, boolean>> = 
     reports: false,
     finances: false,
     whatsapp: false,
+    feedback: false,
     settings: false,
   },
 };

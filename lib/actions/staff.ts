@@ -76,14 +76,14 @@ export async function deleteStaff(staffId: string): Promise<ActionResult> {
 
   const { data: staff } = await supabase
     .from("staff")
-    .select("id, full_name")
+    .select("id, full_name, email, phone, job_title")
     .eq("id", staffId)
     .eq("organization_id", org.organizationId)
+    .is("deleted_at", null)
     .maybeSingle();
 
   if (!staff) return { error: "Staff not found" };
 
-  // Clear open attendance so delete is less likely to cascade-block
   await supabase
     .from("staff_attendance")
     .update({ check_out_at: new Date().toISOString() })
@@ -91,20 +91,21 @@ export async function deleteStaff(staffId: string): Promise<ActionResult> {
     .eq("organization_id", org.organizationId)
     .is("check_out_at", null);
 
-  const { error } = await supabase
-    .from("staff")
-    .delete()
-    .eq("id", staffId)
-    .eq("organization_id", org.organizationId);
+  const { resolveSoftDeleteActor, softDeleteEntity } = await import("@/lib/db/soft-delete");
+  const actor = await resolveSoftDeleteActor();
+  const result = await softDeleteEntity({
+    table: "staff",
+    id: staffId,
+    organizationId: org.organizationId,
+    actor,
+    action: "staff.delete",
+    entityType: "staff",
+    summary: `Deleted staff ${staff.full_name}`,
+    before: staff as unknown as Record<string, unknown>,
+    extraPatch: { is_active: false, online_booking_enabled: false },
+  });
 
-  if (error) {
-    if (error.code === "23503" || /foreign key|restrict/i.test(error.message)) {
-      const deactivated = await setStaffActive(staffId, false);
-      if (deactivated.error) return deactivated;
-      return { success: true };
-    }
-    return { error: error.message };
-  }
+  if (result.error) return { error: result.error };
 
   revalidatePath("/staff");
   revalidatePath("/attendance");
@@ -244,6 +245,7 @@ export async function getStaff() {
     .from("staff")
     .select("*")
     .eq("organization_id", org.organizationId)
+    .is("deleted_at", null)
     .order("full_name");
   if (error) throw new Error(error.message);
   return data;

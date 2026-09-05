@@ -450,8 +450,11 @@ function escapeHtml(value: string): string {
 }
 
 function formatMoney(amount: number): string {
-  const n = Math.round(Number(amount) || 0);
-  return `Rs ${n.toLocaleString("en-PK")}`;
+  const n = Math.round((Number(amount) || 0) * 100) / 100;
+  return `Rs ${n.toLocaleString("en-PK", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 export type BusinessPrintInfo = {
@@ -510,17 +513,19 @@ export type SaleReceiptInput = {
   amountPaid: number;
   /** Outstanding receivable; shown when > 0 */
   amountDue?: number;
+  /** Cash change given at tender (from payments.change_given) */
+  changeGiven?: number;
   /** Thermal paper width; defaults to 80mm. */
   paperWidth?: ThermalPaperWidth;
 };
 
 export function renderSaleReceiptHtml(data: SaleReceiptInput): string {
   const paper = data.paperWidth ?? DEFAULT_THERMAL_PAPER;
-  const amountDue = Math.max(0, Math.round(Number(data.amountDue ?? 0)));
-  const change =
-    amountDue > 0
-      ? 0
-      : Math.max(0, Math.round(data.amountPaid) - Math.round(data.total));
+  const amountDue = Math.max(0, Math.round((Number(data.amountDue ?? 0) || 0) * 100) / 100);
+  const changeGiven = Math.max(
+    0,
+    Math.round((Number(data.changeGiven ?? 0) || 0) * 100) / 100
+  );
 
   const itemsHtml = data.items
     .map((item) => {
@@ -562,14 +567,14 @@ export function renderSaleReceiptHtml(data: SaleReceiptInput): string {
       <div class="total-row muted"><span class="k">Subtotal</span><span class="v mono">${formatMoney(data.subtotal)}</span></div>
       ${data.discount > 0 ? `<div class="total-row muted"><span class="k">Discount</span><span class="v mono">−${formatMoney(data.discount)}</span></div>` : ""}
       ${data.tax > 0 ? `<div class="total-row muted"><span class="k">Tax</span><span class="v mono">+${formatMoney(data.tax)}</span></div>` : ""}
-      ${data.depositApplied > 0 ? `<div class="total-row muted"><span class="k">Advance applied</span><span class="v mono">−${formatMoney(data.depositApplied)}</span></div>` : ""}
       <div class="total-row grand"><span class="k">TOTAL</span><span class="v mono">${formatMoney(data.total)}</span></div>
     </div>
     <div class="pay-box">
       <div class="pay-row"><span>Payment</span><span class="v">${escapeHtml(data.paymentMethod)}</span></div>
+      ${data.depositApplied > 0 ? `<div class="pay-row"><span>Advance applied</span><span class="v mono">${formatMoney(data.depositApplied)}</span></div>` : ""}
       <div class="pay-row"><span>Amount paid</span><span class="v mono">${formatMoney(data.amountPaid)}</span></div>
       ${amountDue > 0 ? `<div class="pay-row"><span>Due payment</span><span class="v mono">${formatMoney(amountDue)}</span></div>` : ""}
-      ${change > 0 ? `<div class="pay-row"><span>Change</span><span class="v mono">${formatMoney(change)}</span></div>` : ""}
+      ${changeGiven > 0 ? `<div class="pay-row"><span>Change</span><span class="v mono">${formatMoney(changeGiven)}</span></div>` : ""}
     </div>
     <div class="thanks">Thank you for visiting</div>
     <div class="sub-thanks">We look forward to seeing you again</div>

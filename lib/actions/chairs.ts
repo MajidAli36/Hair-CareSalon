@@ -32,6 +32,7 @@ export async function getChairs(includeInactive = false): Promise<ChairRow[]> {
   if (!includeInactive) {
     query = query.eq("is_active", true);
   }
+  query = query.is("deleted_at", null);
 
   const { data, error } = await query;
   if (error) throw new Error(error.message);
@@ -130,12 +131,29 @@ export async function setChairActive(id: string, isActive: boolean): Promise<Act
 export async function deleteChair(id: string): Promise<ActionResult> {
   const org = await requireMinimumRole("MANAGER");
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: row } = await supabase
     .from("chairs")
-    .delete()
+    .select("id, name")
     .eq("id", id)
-    .eq("organization_id", org.organizationId);
-  if (error) return { error: error.message };
+    .eq("organization_id", org.organizationId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!row) return { error: "Chair not found" };
+
+  const { resolveSoftDeleteActor, softDeleteEntity } = await import("@/lib/db/soft-delete");
+  const actor = await resolveSoftDeleteActor();
+  const result = await softDeleteEntity({
+    table: "chairs",
+    id,
+    organizationId: org.organizationId,
+    actor,
+    action: "chair.delete",
+    entityType: "chair",
+    summary: `Deleted chair ${row.name}`,
+    before: row as unknown as Record<string, unknown>,
+    extraPatch: { is_active: false },
+  });
+  if (result.error) return { error: result.error };
   revalidatePath("/chairs");
   revalidatePath("/queue");
   return { success: true };

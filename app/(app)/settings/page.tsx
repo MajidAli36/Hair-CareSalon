@@ -1,7 +1,8 @@
-import { getAuditLogs } from "@/lib/actions/audit";
+import { getAuditLogs, getDeletedRecords } from "@/lib/actions/audit";
 import { getActiveOrganization } from "@/lib/auth/organization";
 import { canManageRecords } from "@/lib/auth/permissions";
 import { AuditLogTable } from "@/components/features/settings/audit-log-table";
+import { DeletedRecordsPanel } from "@/components/features/settings/deleted-records-panel";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,12 @@ import { Button } from "@/components/ui/button";
 export default async function SettingsPage() {
   const org = await getActiveOrganization();
   const canManage = await canManageRecords();
-  const auditLogs = canManage ? await getAuditLogs().catch(() => []) : [];
+  const [auditLogs, deletedRecords] = canManage
+    ? await Promise.all([
+        getAuditLogs(200).catch(() => []),
+        getDeletedRecords().catch(() => []),
+      ])
+    : [[], []];
 
   return (
     <div className="space-y-6">
@@ -51,15 +57,32 @@ export default async function SettingsPage() {
       </Card>
 
       {canManage && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Audit log</CardTitle>
-            <CardDescription>Recent sensitive actions (last 50)</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <AuditLogTable logs={auditLogs} />
-          </CardContent>
-        </Card>
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle>Activity & audit trail</CardTitle>
+              <CardDescription>
+                Human-readable history of sales, payments, deletes, and other sensitive actions —
+                who did what, when, and why.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AuditLogTable logs={auditLogs} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Deleted records</CardTitle>
+              <CardDescription>
+                Soft-deleted core records kept for tracking. Restore will be added later.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <DeletedRecordsPanel records={deletedRecords} />
+            </CardContent>
+          </Card>
+        </>
       )}
     </div>
   );

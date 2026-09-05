@@ -1,6 +1,7 @@
 "use server";
 
 import { formatCustomerName } from "@/lib/format";
+import { isoToLocalDateString } from "@/lib/dates/local";
 import {
   cmp,
   createReportContext,
@@ -71,8 +72,9 @@ export async function getCustomersReport(from?: string, to?: string): Promise<Cu
     .from("sales")
     .select("id, customer_id, total, discount, completed_at")
     .eq("organization_id", ctx.organizationId)
-    .in("status", ["COMPLETED", "AMENDED"])
-    .not("customer_id", "is", null);
+      .in("status", ["COMPLETED", "AMENDED"])
+      .is("deleted_at", null)
+      .not("customer_id", "is", null);
 
   const sales = allSales ?? [];
   const saleIds = sales.map((s) => s.id);
@@ -112,6 +114,10 @@ export async function getCustomersReport(from?: string, to?: string): Promise<Cu
   const returningInPeriod = [...periodCustomerIds].filter((id) => {
     const hist = salesByCustomer.get(id) ?? [];
     return hist.some((s) => s.completed_at && new Date(s.completed_at) < ctx.start);
+  });
+  const prevReturningInPeriod = [...prevPeriodCustomerIds].filter((id) => {
+    const hist = salesByCustomer.get(id) ?? [];
+    return hist.some((s) => s.completed_at && new Date(s.completed_at) < ctx.prevStart);
   });
 
   const inactiveCutoff = new Date(ctx.end);
@@ -167,25 +173,18 @@ export async function getCustomersReport(from?: string, to?: string): Promise<Cu
   });
 
   const withVisits = ledger.filter((r) => r.visits > 0);
-  const avgSpend =
-    withVisits.length > 0
-      ? withVisits.reduce((a, r) => a + r.avgSpend, 0) / withVisits.length
-      : 0;
+  const totalVisitCount = withVisits.reduce((a, r) => a + r.visits, 0);
+  const totalSpendAll = withVisits.reduce((a, r) => a + r.totalSpend, 0);
+  // Weighted avg spend per visit (not mean of per-customer AOVs)
+  const avgSpend = totalVisitCount > 0 ? totalSpendAll / totalVisitCount : 0;
   const avgVisits =
-    withVisits.length > 0
-      ? withVisits.reduce((a, r) => a + r.visits, 0) / withVisits.length
-      : 0;
+    withVisits.length > 0 ? totalVisitCount / withVisits.length : 0;
   const clv =
-    withVisits.length > 0
-      ? withVisits.reduce((a, r) => a + r.totalSpend, 0) / withVisits.length
-      : 0;
+    withVisits.length > 0 ? totalSpendAll / withVisits.length : 0;
 
   const retained = [...periodCustomerIds].filter((id) => prevPeriodCustomerIds.has(id)).length;
   const retentionRate =
     prevPeriodCustomerIds.size > 0 ? (retained / prevPeriodCustomerIds.size) * 100 : 0;
-  const prevRetainedEstimate = 0; // single-window comparison only for rate vs 0 baseline period-to-period
-  const prevRetention =
-    prevPeriodCustomerIds.size > 0 ? retentionRate : 0; // show current; prior period retention needs longer history
 
   const inactiveCount = ledger.filter((r) => r.segment === "Inactive").length;
   const atRiskCount = ledger.filter((r) => r.segment === "At Risk").length;
@@ -196,13 +195,11 @@ export async function getCustomersReport(from?: string, to?: string): Promise<Cu
   const growthByDay: Record<string, number> = {};
   for (const c of newInPeriod) {
     if (!c.created_at) continue;
-    const day = c.created_at.slice(0, 10);
+    const day = isoToLocalDateString(c.created_at);
     growthByDay[day] = (growthByDay[day] ?? 0) + 1;
   }
 
   void customerIds;
-  void prevRetention;
-  void prevRetainedEstimate;
 
   return {
     from: ctx.from,
@@ -211,13 +208,13 @@ export async function getCustomersReport(from?: string, to?: string): Promise<Cu
     kpis: {
       totalCustomers: cmp(customers.length, customers.length - newInPeriod.length + prevNew.length),
       newCustomers: cmp(newInPeriod.length, prevNew.length),
-      returningCustomers: cmp(returningInPeriod.length, 0),
+      returningCustomers: cmp(returningInPeriod.length, prevReturningInPeriod.length),
       activeCustomers: cmp(activeCount, activeCount),
       inactiveCustomers: cmp(inactiveCount, inactiveCount),
       avgSpend: cmp(avgSpend, avgSpend),
       avgVisits: cmp(avgVisits, avgVisits),
       clv: cmp(clv, clv),
-      retentionRate: cmp(retentionRate, prevRetention),
+      retentionRate: cmp(retentionRate, retentionRate),
       atRisk: cmp(atRiskCount, atRiskCount),
     },
     growthByDay: Object.entries(growthByDay)

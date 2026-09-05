@@ -135,6 +135,22 @@ export function roundMoney(n: number): number {
   return Math.round((Number(n) || 0) * 100) / 100;
 }
 
+/**
+ * Split a money total equally across n parties.
+ * Remainder cents go to the last share so parts always sum to `total`.
+ */
+export function splitEqually(total: number, n: number): number[] {
+  const count = Math.max(0, Math.floor(n));
+  if (count <= 0) return [];
+  const rounded = roundMoney(total);
+  if (count === 1) return [rounded];
+  const base = roundMoney(rounded / count);
+  const shares = Array.from({ length: count }, () => base);
+  const allocated = roundMoney(base * (count - 1));
+  shares[count - 1] = roundMoney(rounded - allocated);
+  return shares;
+}
+
 export type AmendPayload = {
   saleId: string;
   expectedVersion: number;

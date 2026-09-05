@@ -3,6 +3,7 @@
 import { requireOrganization } from "@/lib/auth/organization";
 import { createClient } from "@/lib/supabase/server";
 import { parseLocalDateRange, isoToLocalDateString } from "@/lib/dates/local";
+import { roundMoney } from "@/lib/sales/calculate";
 import {
   getInventoryMoneySnapshot,
   getProductSalesBreakdown,
@@ -55,6 +56,7 @@ export async function getReportsForRange(
     .select("id, total, completed_at")
     .eq("organization_id", org.organizationId)
     .in("status", ["COMPLETED", "AMENDED"])
+    .is("deleted_at", null)
     .gte("completed_at", start.toISOString())
     .lte("completed_at", end.toISOString());
 
@@ -73,14 +75,16 @@ export async function getReportsForRange(
     items = itemsData ?? [];
   }
 
-  const totalRevenue = saleList.reduce((sum, s) => sum + Number(s.total), 0);
+  const totalRevenue = roundMoney(
+    saleList.reduce((sum, s) => sum + Number(s.total), 0)
+  );
   const saleCount = saleList.length;
 
   const revenueByDay: Record<string, number> = {};
   for (const sale of saleList) {
     if (!sale.completed_at) continue;
     const day = isoToLocalDateString(sale.completed_at);
-    revenueByDay[day] = (revenueByDay[day] ?? 0) + Number(sale.total);
+    revenueByDay[day] = roundMoney((revenueByDay[day] ?? 0) + Number(sale.total));
   }
 
   const topItemsMap: Record<string, { name: string; qty: number; revenue: number; itemType: string }> = {};
@@ -90,7 +94,9 @@ export async function getReportsForRange(
       topItemsMap[key] = { name: item.name, qty: 0, revenue: 0, itemType: item.item_type };
     }
     topItemsMap[key].qty += item.quantity;
-    topItemsMap[key].revenue += Number(item.line_total);
+    topItemsMap[key].revenue = roundMoney(
+      topItemsMap[key].revenue + Number(item.line_total)
+    );
   }
 
   const allItems = Object.values(topItemsMap).sort((a, b) => b.revenue - a.revenue);

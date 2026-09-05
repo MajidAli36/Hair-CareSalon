@@ -14,7 +14,6 @@ import {
 } from "@/lib/sales/calculate";
 import { isPostedSaleStatus } from "@/lib/sales/lifecycle";
 import { syncSalePaymentDenorm } from "@/lib/sales/sync-payment-denorm";
-import { getLocalDateString } from "@/lib/dates/local";
 
 function revalidateSalePaths(saleId: string) {
   revalidatePath("/sales");
@@ -35,6 +34,20 @@ async function sumPayments(saleId: string, organizationId: string) {
     .eq("sale_id", saleId)
     .eq("organization_id", organizationId);
   return (data ?? []).reduce((s, p) => s + Number(p.amount), 0);
+}
+
+/** Cash/card tender only — deposit applications are restored via deposit unlink, not cash refund. */
+async function sumRefundablePayments(saleId: string, organizationId: string) {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("payments")
+    .select("amount, reference")
+    .eq("sale_id", saleId)
+    .eq("organization_id", organizationId);
+  return (data ?? []).reduce((s, p) => {
+    if (p.reference === "APPOINTMENT_DEPOSIT") return s;
+    return s + Number(p.amount);
+  }, 0);
 }
 
 async function sumRefunds(saleId: string, organizationId: string) {
@@ -195,12 +208,20 @@ export async function previewSaleAmendment(payload: AmendPayload) {
   const totals = calculateInvoiceTotals(payload.items, payload.discount, payload.tax ?? 0);
   const paymentsTotal = await sumPayments(sale.id, org.organizationId);
   const refundsTotal = await sumRefunds(sale.id, org.organizationId);
-  const adjustment = calculatePaymentAdjustment({
+  const cashRefundable = roundMoney(
+    (await sumRefundablePayments(sale.id, org.organizationId)) - refundsTotal
+  );
+  const rawAdjustment = calculatePaymentAdjustment({
     oldTotal: Number(sale.total),
     newTotal: totals.total,
     paymentsTotal,
     refundsTotal,
   });
+  // Never cash-refund deposit applications on amend — only refundable cash/card
+  const adjustment = {
+    ...rawAdjustment,
+    refundDue: roundMoney(Math.min(rawAdjustment.refundDue, Math.max(0, cashRefundable))),
+  };
 
   return {
     totals,
@@ -254,12 +275,19 @@ export async function amendCompletedSale(
   const totals = calculateInvoiceTotals(payload.items, payload.discount, payload.tax ?? 0);
   const paymentsTotal = await sumPayments(sale.id, org.organizationId);
   const refundsTotal = await sumRefunds(sale.id, org.organizationId);
-  const adjustment = calculatePaymentAdjustment({
+  const cashRefundable = roundMoney(
+    (await sumRefundablePayments(sale.id, org.organizationId)) - refundsTotal
+  );
+  const rawAdjustment = calculatePaymentAdjustment({
     oldTotal: Number(sale.total),
     newTotal: totals.total,
     paymentsTotal,
     refundsTotal,
   });
+  const adjustment = {
+    ...rawAdjustment,
+    refundDue: roundMoney(Math.min(rawAdjustment.refundDue, Math.max(0, cashRefundable))),
+  };
 
   if (adjustment.additionalDue > 0 && payload.settleAdditionalNow) {
     const pay = payload.additionalPayment;
@@ -326,6 +354,24 @@ export async function amendCompletedSale(
       .eq("organization_id", org.organizationId);
     if (delErr) throw new Error(delErr.message);
 
+    // Snapshot costs for new product lines
+    const productIds = [
+      ...new Set(
+        totals.lines.filter((l) => l.itemType === "PRODUCT").map((l) => l.itemId)
+      ),
+    ];
+    const costById = new Map<string, number>();
+    if (productIds.length) {
+      const { data: products } = await supabase
+        .from("products")
+        .select("id, cost_price")
+        .eq("organization_id", org.organizationId)
+        .in("id", productIds);
+      for (const p of products ?? []) {
+        costById.set(p.id, Number(p.cost_price) || 0);
+      }
+    }
+
     const { error: insErr } = await supabase.from("sale_items").insert(
       totals.lines.map((line) => ({
         organization_id: org.organizationId,
@@ -336,6 +382,8 @@ export async function amendCompletedSale(
         quantity: line.quantity,
         unit_price: line.unitPrice,
         line_total: line.lineTotal,
+        unit_cost:
+          line.itemType === "PRODUCT" ? roundMoney(costById.get(line.itemId) ?? 0) : 0,
       }))
     );
     if (insErr) throw new Error(insErr.message);
@@ -367,21 +415,16 @@ export async function amendCompletedSale(
       });
       if (refundErr) throw new Error(refundErr.message);
 
-      await supabase.from("expenses").insert({
-        organization_id: org.organizationId,
-        category: "OTHER",
-        amount: adjustment.refundDue,
-        description: `Invoice amendment refund — ${reason}`,
-        expense_date: getLocalDateString(),
-        payment_method: payload.refundPayment.method,
-        created_by: userId,
-      });
+      // Cash leaving is tracked on sale_refunds. Ticket total already drops on amend,
+      // so an expenses row would double-count against net profit.
     }
 
     const newVersion = currentVersion + 1;
-    const newPaymentTotal =
-      paymentsTotal +
-      (adjustment.additionalDue > 0 ? adjustment.additionalDue : 0);
+    const additionalCollected =
+      adjustment.additionalDue > 0 && payload.additionalPayment
+        ? roundMoney(payload.additionalPayment.amount)
+        : 0;
+    const newPaymentTotal = roundMoney(paymentsTotal + additionalCollected);
 
     const { data: version, error: verErr } = await supabase
       .from("sale_versions")
@@ -394,7 +437,9 @@ export async function amendCompletedSale(
         subtotal: totals.subtotal,
         discount: totals.discount,
         tax: totals.tax,
-        deposit_applied: Number(sale.deposit_applied ?? 0),
+        deposit_applied: roundMoney(
+          Math.min(Number(sale.deposit_applied ?? 0), totals.total)
+        ),
         total: totals.total,
         payment_total: newPaymentTotal,
         status: "AMENDED",
@@ -421,6 +466,109 @@ export async function amendCompletedSale(
     );
     if (vItemsErr) throw new Error(vItemsErr.message);
 
+    const oldDepositApplied = roundMoney(Number(sale.deposit_applied ?? 0));
+    const newDepositApplied = roundMoney(Math.min(oldDepositApplied, totals.total));
+
+    if (newDepositApplied < oldDepositApplied - 0.009) {
+      // Excess advance was covering a higher ticket — free unused credit and shrink deposit payment
+      await supabase
+        .from("appointment_deposits")
+        .update({ applied_to_sale_id: null })
+        .eq("applied_to_sale_id", sale.id)
+        .eq("organization_id", org.organizationId);
+
+      const { data: depositPay } = await supabase
+        .from("payments")
+        .select("id")
+        .eq("sale_id", sale.id)
+        .eq("organization_id", org.organizationId)
+        .eq("reference", "APPOINTMENT_DEPOSIT")
+        .maybeSingle();
+
+      if (newDepositApplied <= 0.009) {
+        if (depositPay) {
+          await supabase.from("payments").delete().eq("id", depositPay.id);
+        }
+      } else if (depositPay) {
+        // payments.Update is intentionally empty in types — replace the row
+        const { data: oldPay } = await supabase
+          .from("payments")
+          .select("sale_id, method, reference, notes, created_by, paid_at")
+          .eq("id", depositPay.id)
+          .maybeSingle();
+        await supabase.from("payments").delete().eq("id", depositPay.id);
+        if (oldPay) {
+          await supabase.from("payments").insert({
+            organization_id: org.organizationId,
+            sale_id: oldPay.sale_id,
+            amount: newDepositApplied,
+            method: oldPay.method,
+            reference: oldPay.reference,
+            notes: oldPay.notes,
+            created_by: oldPay.created_by,
+            paid_at: oldPay.paid_at,
+          });
+        }
+        // Re-apply deposits up to the reduced amount
+        const apptId = payload.appointmentId ?? sale.appointment_id;
+        if (apptId) {
+          const { data: freeDeposits } = await supabase
+            .from("appointment_deposits")
+            .select("id, amount")
+            .eq("organization_id", org.organizationId)
+            .eq("appointment_id", apptId)
+            .eq("status", "APPROVED")
+            .is("applied_to_sale_id", null);
+          let remaining = newDepositApplied;
+          for (const dep of freeDeposits ?? []) {
+            if (remaining <= 0) break;
+            const depAmt = roundMoney(Number(dep.amount));
+            const applyAmt = roundMoney(Math.min(remaining, depAmt));
+            if (applyAmt <= 0) continue;
+            if (applyAmt < depAmt) {
+              await supabase
+                .from("appointment_deposits")
+                .update({ amount: applyAmt, applied_to_sale_id: sale.id })
+                .eq("id", dep.id);
+              const leftover = roundMoney(depAmt - applyAmt);
+              if (leftover > 0) {
+                const { data: original } = await supabase
+                  .from("appointment_deposits")
+                  .select(
+                    "appointment_id, method, notes, status, payment_reference, proof_path, approved_at, approved_by, paid_at, created_by"
+                  )
+                  .eq("id", dep.id)
+                  .maybeSingle();
+                if (original) {
+                  await supabase.from("appointment_deposits").insert({
+                    organization_id: org.organizationId,
+                    appointment_id: original.appointment_id,
+                    amount: leftover,
+                    method: original.method,
+                    notes: original.notes,
+                    status: original.status,
+                    payment_reference: original.payment_reference,
+                    proof_path: original.proof_path,
+                    approved_at: original.approved_at,
+                    approved_by: original.approved_by,
+                    applied_to_sale_id: null,
+                    paid_at: original.paid_at,
+                    created_by: original.created_by,
+                  });
+                }
+              }
+            } else {
+              await supabase
+                .from("appointment_deposits")
+                .update({ applied_to_sale_id: sale.id })
+                .eq("id", dep.id);
+            }
+            remaining = roundMoney(remaining - applyAmt);
+          }
+        }
+      }
+    }
+
     const { error: updErr } = await supabase
       .from("sales")
       .update({
@@ -429,6 +577,7 @@ export async function amendCompletedSale(
         subtotal: totals.subtotal,
         discount: totals.discount,
         tax: totals.tax,
+        deposit_applied: newDepositApplied,
         total: totals.total,
         notes: payload.notes ?? sale.notes,
         status: "AMENDED",
@@ -451,6 +600,9 @@ export async function amendCompletedSale(
       entityType: "sale",
       entityId: sale.id,
       metadata: {
+        summary: `Amended v${currentVersion} → v${newVersion}${
+          reason ? ` · ${reason}` : ""
+        }`,
         fromVersion: currentVersion,
         toVersion: newVersion,
         oldTotal: Number(sale.total),
@@ -510,11 +662,11 @@ export async function refundSale(input: {
     return { error: "Cannot refund this sale status" };
   }
 
-  const paymentsTotal = await sumPayments(sale.id, org.organizationId);
+  const paymentsTotal = await sumRefundablePayments(sale.id, org.organizationId);
   const refundsTotal = await sumRefunds(sale.id, org.organizationId);
   const refundable = Math.round((paymentsTotal - refundsTotal) * 100) / 100;
   if (amount > refundable + 0.009) {
-    return { error: `Refund exceeds net collected (max ${refundable})` };
+    return { error: `Refund exceeds refundable cash/card collected (max ${refundable})` };
   }
 
   const { error: refundErr } = await supabase.from("sale_refunds").insert({
@@ -527,15 +679,9 @@ export async function refundSale(input: {
   });
   if (refundErr) return { error: refundErr.message };
 
-  await supabase.from("expenses").insert({
-    organization_id: org.organizationId,
-    category: "OTHER",
-    amount,
-    description: `Sale refund — ${reason}`,
-    expense_date: getLocalDateString(),
-    payment_method: input.method,
-    created_by: user?.id ?? null,
-  });
+  // Track cash-out on sale_refunds only. Full refunds remove the sale from revenue;
+  // partial refunds are subtracted in financial summary via sale_refunds on posted sales.
+  // An expenses row here would double-hit P&L.
 
   const newRefunds = refundsTotal + amount;
   const fullyRefunded = newRefunds >= paymentsTotal - 0.009;
@@ -557,6 +703,13 @@ export async function refundSale(input: {
     } catch (e) {
       return { error: e instanceof Error ? e.message : "Inventory restore failed" };
     }
+
+    // Unlink advances so they can be reused or refunded (same as void)
+    await supabase
+      .from("appointment_deposits")
+      .update({ applied_to_sale_id: null })
+      .eq("applied_to_sale_id", sale.id)
+      .eq("organization_id", org.organizationId);
 
     await supabase
       .from("sales")

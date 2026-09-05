@@ -6,6 +6,25 @@ export type MemberRole =
   | "RECEPTIONIST"
   | "STAFF";
 
+/** Soft-delete + actor tracking columns shared by core tables. */
+export type SoftDeleteFields = {
+  deleted_at: string | null;
+  deleted_by: string | null;
+  deleted_by_role: MemberRole | null;
+  created_by: string | null;
+  updated_by: string | null;
+};
+
+export type SoftDeleteInsert = {
+  deleted_at?: string | null;
+  deleted_by?: string | null;
+  deleted_by_role?: MemberRole | null;
+  created_by?: string | null;
+  updated_by?: string | null;
+};
+
+export type SoftDeleteUpdate = SoftDeleteInsert;
+
 export type Json =
   | string
   | number
@@ -108,6 +127,10 @@ export type Database = {
           notes: string | null;
           tags: string[];
           deleted_at: string | null;
+          deleted_by: string | null;
+          deleted_by_role: MemberRole | null;
+          created_by: string | null;
+          updated_by: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -121,6 +144,10 @@ export type Database = {
           notes?: string | null;
           tags?: string[];
           deleted_at?: string | null;
+          deleted_by?: string | null;
+          deleted_by_role?: MemberRole | null;
+          created_by?: string | null;
+          updated_by?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -134,6 +161,10 @@ export type Database = {
           notes?: string | null;
           tags?: string[];
           deleted_at?: string | null;
+          deleted_by?: string | null;
+          deleted_by_role?: MemberRole | null;
+          created_by?: string | null;
+          updated_by?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -153,6 +184,11 @@ export type Database = {
           organization_id: string;
           name: string;
           sort_order: number;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          deleted_by_role: MemberRole | null;
+          created_by: string | null;
+          updated_by: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -161,6 +197,11 @@ export type Database = {
           organization_id: string;
           name: string;
           sort_order?: number;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+          deleted_by_role?: MemberRole | null;
+          created_by?: string | null;
+          updated_by?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -169,6 +210,11 @@ export type Database = {
           organization_id?: string;
           name?: string;
           sort_order?: number;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+          deleted_by_role?: MemberRole | null;
+          created_by?: string | null;
+          updated_by?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -192,6 +238,11 @@ export type Database = {
           price: number;
           duration_minutes: number;
           is_active: boolean;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          deleted_by_role: MemberRole | null;
+          created_by: string | null;
+          updated_by: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -204,6 +255,11 @@ export type Database = {
           price?: number;
           duration_minutes?: number;
           is_active?: boolean;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+          deleted_by_role?: MemberRole | null;
+          created_by?: string | null;
+          updated_by?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -216,6 +272,11 @@ export type Database = {
           price?: number;
           duration_minutes?: number;
           is_active?: boolean;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+          deleted_by_role?: MemberRole | null;
+          created_by?: string | null;
+          updated_by?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -244,6 +305,11 @@ export type Database = {
           description: string | null;
           price: number;
           is_active: boolean;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          deleted_by_role: MemberRole | null;
+          created_by: string | null;
+          updated_by: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -254,6 +320,11 @@ export type Database = {
           description?: string | null;
           price?: number;
           is_active?: boolean;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+          deleted_by_role?: MemberRole | null;
+          created_by?: string | null;
+          updated_by?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -264,6 +335,11 @@ export type Database = {
           description?: string | null;
           price?: number;
           is_active?: boolean;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+          deleted_by_role?: MemberRole | null;
+          created_by?: string | null;
+          updated_by?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -330,9 +406,45 @@ export type Database = {
         ];
       };
       product_categories: {
-        Row: { id: string; organization_id: string; name: string; sort_order: number; created_at: string; updated_at: string };
-        Insert: { id?: string; organization_id: string; name: string; sort_order?: number; created_at?: string; updated_at?: string };
-        Update: { id?: string; organization_id?: string; name?: string; sort_order?: number; created_at?: string; updated_at?: string };
+        Row: {
+          id: string;
+          organization_id: string;
+          name: string;
+          sort_order: number;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          deleted_by_role: MemberRole | null;
+          created_by: string | null;
+          updated_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          name: string;
+          sort_order?: number;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+          deleted_by_role?: MemberRole | null;
+          created_by?: string | null;
+          updated_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          name?: string;
+          sort_order?: number;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+          deleted_by_role?: MemberRole | null;
+          created_by?: string | null;
+          updated_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
         Relationships: [];
       };
       products: {
@@ -340,18 +452,24 @@ export type Database = {
           id: string; organization_id: string; category_id: string | null; sku: string | null;
           name: string; description: string | null; cost_price: number; retail_price: number;
           stock_quantity: number; low_stock_threshold: number; is_active: boolean;
+          deleted_at: string | null; deleted_by: string | null; deleted_by_role: MemberRole | null;
+          created_by: string | null; updated_by: string | null;
           created_at: string; updated_at: string;
         };
         Insert: {
           id?: string; organization_id: string; category_id?: string | null; sku?: string | null;
           name: string; description?: string | null; cost_price?: number; retail_price?: number;
           stock_quantity?: number; low_stock_threshold?: number; is_active?: boolean;
+          deleted_at?: string | null; deleted_by?: string | null; deleted_by_role?: MemberRole | null;
+          created_by?: string | null; updated_by?: string | null;
           created_at?: string; updated_at?: string;
         };
         Update: {
           id?: string; organization_id?: string; category_id?: string | null; sku?: string | null;
           name?: string; description?: string | null; cost_price?: number; retail_price?: number;
           stock_quantity?: number; low_stock_threshold?: number; is_active?: boolean;
+          deleted_at?: string | null; deleted_by?: string | null; deleted_by_role?: MemberRole | null;
+          created_by?: string | null; updated_by?: string | null;
           created_at?: string; updated_at?: string;
         };
         Relationships: [];
@@ -390,6 +508,8 @@ export type Database = {
           last_amended_at: string | null;
           last_amended_by: string | null;
           created_by: string | null; completed_at: string | null; voided_at: string | null;
+          deleted_at: string | null; deleted_by: string | null; deleted_by_role: MemberRole | null;
+          updated_by: string | null;
           created_at: string; updated_at: string;
         };
         Insert: {
@@ -409,6 +529,8 @@ export type Database = {
           last_amended_at?: string | null;
           last_amended_by?: string | null;
           created_by?: string | null; completed_at?: string | null; voided_at?: string | null;
+          deleted_at?: string | null; deleted_by?: string | null; deleted_by_role?: MemberRole | null;
+          updated_by?: string | null;
           created_at?: string; updated_at?: string;
         };
         Update: {
@@ -428,6 +550,8 @@ export type Database = {
           last_amended_at?: string | null;
           last_amended_by?: string | null;
           created_by?: string | null; completed_at?: string | null; voided_at?: string | null;
+          deleted_at?: string | null; deleted_by?: string | null; deleted_by_role?: MemberRole | null;
+          updated_by?: string | null;
           created_at?: string; updated_at?: string;
         };
         Relationships: [];
@@ -436,14 +560,37 @@ export type Database = {
         Row: {
           id: string; organization_id: string; sale_id: string;
           item_type: "SERVICE" | "PRODUCT" | "PACKAGE"; item_id: string; name: string;
-          quantity: number; unit_price: number; line_total: number; created_at: string;
+          quantity: number; unit_price: number; line_total: number;
+          unit_cost: number; created_at: string;
         };
         Insert: {
           id?: string; organization_id: string; sale_id: string;
           item_type: "SERVICE" | "PRODUCT" | "PACKAGE"; item_id: string; name: string;
-          quantity?: number; unit_price: number; line_total: number; created_at?: string;
+          quantity?: number; unit_price: number; line_total: number;
+          unit_cost?: number; created_at?: string;
         };
         Update: Record<string, never>;
+        Relationships: [];
+      };
+      sale_staff: {
+        Row: {
+          sale_id: string;
+          staff_id: string;
+          organization_id: string;
+          created_at: string;
+        };
+        Insert: {
+          sale_id: string;
+          staff_id: string;
+          organization_id: string;
+          created_at?: string;
+        };
+        Update: {
+          sale_id?: string;
+          staff_id?: string;
+          organization_id?: string;
+          created_at?: string;
+        };
         Relationships: [];
       };
       sale_versions: {
@@ -509,9 +656,44 @@ export type Database = {
         Relationships: [];
       };
       invoices: {
-        Row: { id: string; organization_id: string; sale_id: string; invoice_number: string; issued_at: string; created_at: string };
-        Insert: { id?: string; organization_id: string; sale_id: string; invoice_number: string; issued_at?: string; created_at?: string };
-        Update: Record<string, never>;
+        Row: {
+          id: string;
+          organization_id: string;
+          sale_id: string;
+          invoice_number: string;
+          issued_at: string;
+          created_at: string;
+          updated_at: string;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          deleted_by_role: MemberRole | null;
+          created_by: string | null;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          sale_id: string;
+          invoice_number: string;
+          issued_at?: string;
+          created_at?: string;
+          updated_at?: string;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+          deleted_by_role?: MemberRole | null;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+        Update: {
+          invoice_number?: string;
+          issued_at?: string;
+          updated_at?: string;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+          deleted_by_role?: MemberRole | null;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
         Relationships: [];
       };
       payments: {
@@ -578,6 +760,7 @@ export type Database = {
           refunded_by?: string | null;
         };
         Update: {
+          amount?: number;
           status?: "PENDING" | "APPROVED" | "REJECTED" | "REFUNDED";
           payment_reference?: string | null;
           proof_path?: string | null;
@@ -712,14 +895,54 @@ export type Database = {
         };
         Relationships: [];
       };
+      customer_feedback: {
+        Row: {
+          id: string;
+          organization_id: string;
+          customer_id: string | null;
+          walk_in_name: string | null;
+          staff_id: string | null;
+          rating_overall: number;
+          rating_behaviour: number;
+          rating_expertise: number;
+          rating_service: number;
+          rating_cleanliness: number;
+          rating_value: number;
+          rating_wait_time: number;
+          comment: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          customer_id?: string | null;
+          walk_in_name?: string | null;
+          staff_id?: string | null;
+          rating_overall: number;
+          rating_behaviour: number;
+          rating_expertise: number;
+          rating_service: number;
+          rating_cleanliness: number;
+          rating_value: number;
+          rating_wait_time: number;
+          comment?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: Record<string, unknown>;
+        Relationships: [];
+      };
       audit_logs: {
         Row: {
           id: string; organization_id: string; user_id: string | null;
+          actor_role: MemberRole | null; actor_email: string | null;
           action: string; entity_type: string; entity_id: string | null;
           metadata: Record<string, unknown>; created_at: string;
         };
         Insert: {
           id?: string; organization_id: string; user_id?: string | null;
+          actor_role?: MemberRole | null; actor_email?: string | null;
           action: string; entity_type: string; entity_id?: string | null;
           metadata?: Record<string, unknown>; created_at?: string;
         };
@@ -734,6 +957,8 @@ export type Database = {
           thumb_id: string | null; thumb_enrolled_at: string | null;
           is_active: boolean;
           online_booking_enabled: boolean;
+          deleted_at: string | null; deleted_by: string | null; deleted_by_role: MemberRole | null;
+          created_by: string | null; updated_by: string | null;
           created_at: string; updated_at: string;
         };
         Insert: {
@@ -743,6 +968,8 @@ export type Database = {
           thumb_id?: string | null; thumb_enrolled_at?: string | null;
           is_active?: boolean;
           online_booking_enabled?: boolean;
+          deleted_at?: string | null; deleted_by?: string | null; deleted_by_role?: MemberRole | null;
+          created_by?: string | null; updated_by?: string | null;
           created_at?: string; updated_at?: string;
         };
         Update: Record<string, unknown>;
@@ -783,6 +1010,40 @@ export type Database = {
         Update: Record<string, unknown>;
         Relationships: [];
       };
+      staff_notes: {
+        Row: {
+          id: string;
+          organization_id: string;
+          staff_id: string;
+          note_type: "WARNING" | "COMPLAINT" | "PRAISE" | "NOTE";
+          title: string;
+          details: string | null;
+          severity: number;
+          occurred_on: string;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          staff_id: string;
+          note_type: "WARNING" | "COMPLAINT" | "PRAISE" | "NOTE";
+          title: string;
+          details?: string | null;
+          severity?: number;
+          occurred_on?: string;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          note_type?: "WARNING" | "COMPLAINT" | "PRAISE" | "NOTE";
+          title?: string;
+          details?: string | null;
+          severity?: number;
+          occurred_on?: string;
+        };
+        Relationships: [];
+      };
       appointments: {
         Row: {
           id: string; organization_id: string; customer_id: string; staff_id: string | null;
@@ -791,6 +1052,8 @@ export type Database = {
           booking_number: string | null;
           manual_payment_amount: number | null; manual_payment_method: string | null;
           manual_payment_notes: string | null; manual_payment_at: string | null;
+          deleted_at: string | null; deleted_by: string | null; deleted_by_role: MemberRole | null;
+          created_by: string | null; updated_by: string | null;
           created_at: string; updated_at: string;
         };
         Insert: Record<string, unknown>;
@@ -822,7 +1085,13 @@ export type Database = {
           name: string;
           sort_order: number;
           is_active: boolean;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          deleted_by_role: MemberRole | null;
+          created_by: string | null;
+          updated_by: string | null;
           created_at: string;
+          updated_at: string;
         };
         Insert: {
           id?: string;
@@ -830,12 +1099,24 @@ export type Database = {
           name: string;
           sort_order?: number;
           is_active?: boolean;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+          deleted_by_role?: MemberRole | null;
+          created_by?: string | null;
+          updated_by?: string | null;
           created_at?: string;
+          updated_at?: string;
         };
         Update: {
           name?: string;
           sort_order?: number;
           is_active?: boolean;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+          deleted_by_role?: MemberRole | null;
+          created_by?: string | null;
+          updated_by?: string | null;
+          updated_at?: string;
         };
         Relationships: [];
       };

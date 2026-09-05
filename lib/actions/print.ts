@@ -55,7 +55,12 @@ export async function getSaleReceiptHtml(saleId: string): Promise<string | null>
     | { invoice_number: string; issued_at: string }[]
     | null;
   const invoiceData = Array.isArray(invoice) ? invoice[0] : invoice;
-  const payments = (sale.payments ?? []) as { method: string; amount: number }[];
+  const payments = (sale.payments ?? []) as {
+    method: string;
+    amount: number;
+    change_given?: number | null;
+    reference?: string | null;
+  }[];
   const completedAt = sale.completed_at ? new Date(sale.completed_at) : new Date();
   const saleAny = sale as { amount_paid?: number; amount_due?: number; amount_refunded?: number };
   const amountPaid =
@@ -66,6 +71,10 @@ export async function getSaleReceiptHtml(saleId: string): Promise<string | null>
     saleAny.amount_due != null
       ? Number(saleAny.amount_due)
       : Math.max(0, Number(sale.total) - amountPaid + Number(saleAny.amount_refunded ?? 0));
+  const changeGiven = payments.reduce((s, p) => s + (Number(p.change_given) || 0), 0);
+  const tenderMethods = payments
+    .filter((p) => p.reference !== "APPOINTMENT_DEPOSIT")
+    .map((p) => p.method);
 
   const data: SaleReceiptInput = {
     business,
@@ -87,9 +96,10 @@ export async function getSaleReceiptHtml(saleId: string): Promise<string | null>
     tax: Number(sale.tax ?? 0),
     depositApplied: Number(sale.deposit_applied ?? 0),
     total: Number(sale.total),
-    paymentMethod: payments[0]?.method ?? "CASH",
+    paymentMethod: tenderMethods[0] ?? payments[0]?.method ?? "CASH",
     amountPaid,
     amountDue,
+    changeGiven,
   };
 
   return renderSaleReceiptHtml(data);
@@ -169,7 +179,9 @@ export async function getAppointmentReceiptHtml(
     ]);
 
   const business = await getBusinessInfo();
-  const advance = (deposits ?? []).reduce((s, d) => s + Number(d.amount), 0);
+  const advance = (deposits ?? [])
+    .filter((d) => d.status === "APPROVED")
+    .reduce((s, d) => s + Number(d.amount), 0);
   const pendingApproval = (deposits ?? []).some((d) => d.status === "PENDING");
 
   const data: AppointmentReceiptInput = {

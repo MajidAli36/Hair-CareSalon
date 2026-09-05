@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { writeAuditLog } from "@/lib/audit/log";
 import { requireMinimumRole } from "@/lib/auth/permissions";
 import { requireOrganization } from "@/lib/auth/organization";
 import { createClient } from "@/lib/supabase/server";
@@ -110,23 +109,31 @@ export async function updateCustomer(
 export async function deleteCustomer(id: string): Promise<ActionResult> {
   const org = await requireMinimumRole("MANAGER");
   const supabase = await createClient();
-
-  const { error } = await supabase
+  const { data: customer } = await supabase
     .from("customers")
-    .update({ deleted_at: new Date().toISOString() })
+    .select("id, first_name, last_name, phone, email")
     .eq("id", id)
-    .eq("organization_id", org.organizationId);
+    .eq("organization_id", org.organizationId)
+    .is("deleted_at", null)
+    .maybeSingle();
 
-  if (error) return { error: error.message };
+  if (!customer) return { error: "Customer not found" };
 
-  const { data: { user } } = await supabase.auth.getUser();
-  await writeAuditLog({
+  const { resolveSoftDeleteActor, softDeleteEntity } = await import("@/lib/db/soft-delete");
+  const actor = await resolveSoftDeleteActor();
+  const name = [customer.first_name, customer.last_name].filter(Boolean).join(" ");
+  const result = await softDeleteEntity({
+    table: "customers",
+    id,
     organizationId: org.organizationId,
-    userId: user?.id,
+    actor,
     action: "customer.delete",
     entityType: "customer",
-    entityId: id,
+    summary: `Deleted customer ${name}`,
+    before: customer as unknown as Record<string, unknown>,
   });
+
+  if (result.error) return { error: result.error };
 
   revalidatePath("/customers");
   redirect("/customers");

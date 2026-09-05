@@ -36,9 +36,9 @@ export function CustomerInsights({
       icon: Repeat,
     },
     {
-      label: "Average Spend",
+      label: "Avg lifetime spend",
       value: formatCurrency(averageSpend),
-      sub: retentionRate != null ? `${retentionRate.toFixed(0)}% retention` : "Per customer",
+      sub: retentionRate != null ? `${retentionRate.toFixed(0)}% retention` : "Per customer with sales",
       icon: Wallet,
     },
   ];

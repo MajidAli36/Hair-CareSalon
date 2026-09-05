@@ -13,6 +13,7 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatCustomerName, formatDate, formatTime } from "@/lib/format";
 import { getLocalDateString } from "@/lib/dates/local";
+import { calculateInvoiceTotals, roundMoney } from "@/lib/sales/calculate";
 import type { CartItem, PaymentMethod } from "@/types/commerce";
 import { cn } from "@/lib/utils";
 import { X } from "lucide-react";
@@ -55,7 +56,7 @@ export function PosTerminal({
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customerId, setCustomerId] = useState("");
   const [appointmentId, setAppointmentId] = useState("");
-  const [staffId, setStaffId] = useState("");
+  const [staffIds, setStaffIds] = useState<string[]>([]);
   const [depositCredit, setDepositCredit] = useState(0);
   const [discount, setDiscount] = useState(0);
   const [tax, setTax] = useState("");
@@ -79,22 +80,37 @@ export function PosTerminal({
     [appointments]
   );
 
-  const subtotal = cart.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
-  const discountAmount = Math.min(Math.max(0, discount), subtotal);
-  const taxAmount = applyTax ? Math.max(0, Number(tax) || 0) : 0;
-  const total = Math.max(0, subtotal - discountAmount + taxAmount);
-  const appliedDeposit = Math.min(depositCredit, total);
-  const amountDue = Math.max(0, total - appliedDeposit);
+  const invoiceTotals = useMemo(
+    () =>
+      calculateInvoiceTotals(
+        cart.map((i) => ({
+          itemType: i.itemType,
+          itemId: i.itemId,
+          name: i.name,
+          unitPrice: i.unitPrice,
+          quantity: i.quantity,
+        })),
+        discount,
+        applyTax ? Number(tax) || 0 : 0
+      ),
+    [cart, discount, applyTax, tax]
+  );
+  const subtotal = invoiceTotals.subtotal;
+  const discountAmount = invoiceTotals.discount;
+  const taxAmount = invoiceTotals.tax;
+  const total = invoiceTotals.total;
+  const appliedDeposit = roundMoney(Math.min(depositCredit, total));
+  const amountDue = roundMoney(Math.max(0, total - appliedDeposit));
   const receivedNow =
     amountReceived === ""
       ? amountDue
-      : Math.max(0, Number(amountReceived) || 0);
-  const remainingDue = Math.max(0, Math.round((amountDue - receivedNow) * 100) / 100);
+      : roundMoney(Math.max(0, Number(amountReceived) || 0));
+  const remainingDue = roundMoney(Math.max(0, amountDue - receivedNow));
   const tendered =
     tenderedAmount === ""
       ? receivedNow
-      : Math.max(0, Number(tenderedAmount) || 0);
-  const changeGiven = Math.max(0, Math.round((tendered - receivedNow) * 100) / 100);
+      : roundMoney(Math.max(0, Number(tenderedAmount) || 0));
+  const changeGiven = roundMoney(Math.max(0, tendered - receivedNow));
   const isWalkIn = !customerId;
   const isPartial = remainingDue > 0.009;
   const isUnpaid = receivedNow <= 0 && amountDue > 0;
@@ -103,7 +119,7 @@ export function PosTerminal({
     setAppointmentId(appt.id);
     setCustomerId(appt.customerId);
     setDepositCredit(appt.depositBalance);
-    if (appt.staffId) setStaffId(appt.staffId);
+    if (appt.staffId) setStaffIds([appt.staffId]);
     if (loadServices && appt.services.length > 0) {
       setCart(
         appt.services.map((s) => ({
@@ -133,6 +149,7 @@ export function PosTerminal({
     if (!nextCustomerId) {
       setAppointmentId("");
       setDepositCredit(0);
+      setStaffIds([]);
       return;
     }
 
@@ -185,14 +202,24 @@ export function PosTerminal({
       const existing = prev.find(
         (c) => c.itemId === item.itemId && c.itemType === item.itemType
       );
+      const nextQty = (existing?.quantity ?? 0) + 1;
+      if (item.itemType === "PRODUCT") {
+        const product = products.find((p) => p.id === item.itemId);
+        const stock = product?.stock_quantity ?? 0;
+        if (nextQty > stock) {
+          setError(`Only ${stock} in stock for ${item.name}`);
+          return prev;
+        }
+      }
+      setError(null);
       if (existing) {
         return prev.map((c) =>
           c.itemId === item.itemId && c.itemType === item.itemType
-            ? { ...c, quantity: c.quantity + 1 }
+            ? { ...c, quantity: nextQty }
             : c
         );
       }
-      return [...prev, item];
+      return [...prev, { ...item, quantity: 1 }];
     });
   }
 
@@ -200,6 +227,16 @@ export function PosTerminal({
     if (qty <= 0) {
       setCart((prev) => prev.filter((c) => !(c.itemType === itemType && c.itemId === itemId)));
       return;
+    }
+    if (itemType === "PRODUCT") {
+      const product = products.find((p) => p.id === itemId);
+      const stock = product?.stock_quantity ?? 0;
+      if (qty > stock) {
+        setError(`Only ${stock} in stock for ${product?.name ?? "product"}`);
+        qty = stock;
+      } else {
+        setError(null);
+      }
     }
     setCart((prev) =>
       prev.map((c) =>
@@ -230,7 +267,8 @@ export function PosTerminal({
       items: cart,
       customerId: customerId || null,
       appointmentId: appointmentId || null,
-      staffId: staffId || null,
+      staffId: staffIds[0] ?? null,
+      staffIds,
       discount: discountAmount,
       tax: taxAmount > 0 ? taxAmount : undefined,
       paymentMethod,
@@ -436,22 +474,37 @@ export function PosTerminal({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="served-by">Served by</Label>
-          <select
-            id="served-by"
-            value={staffId}
-            onChange={(e) => setStaffId(e.target.value)}
-            className="flex h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm"
-          >
-            <option value="">Unassigned</option>
-            {staff.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.full_name}
-              </option>
-            ))}
-          </select>
+          <Label>Served by</Label>
+          <p className="text-xs text-muted-foreground">Select one or more</p>
+          <div className="max-h-36 space-y-1.5 overflow-y-auto rounded-lg border border-input p-2">
+            {staff.length === 0 ? (
+              <p className="px-1 py-1 text-xs text-muted-foreground">No active staff</p>
+            ) : (
+              staff.map((s) => {
+                const checked = staffIds.includes(s.id);
+                return (
+                  <label
+                    key={s.id}
+                    className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-sm hover:bg-muted/60"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => {
+                        setStaffIds((prev) =>
+                          checked ? prev.filter((id) => id !== s.id) : [...prev, s.id]
+                        );
+                      }}
+                      className="size-3.5 accent-primary"
+                    />
+                    <span>{s.full_name}</span>
+                  </label>
+                );
+              })
+            )}
+          </div>
           <p className="text-xs text-muted-foreground">
-            Counts toward staff performance. Auto-fills from the linked appointment.
+            Counts toward staff performance (split equally). Auto-fills from the linked appointment.
           </p>
         </div>
 

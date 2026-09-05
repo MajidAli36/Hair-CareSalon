@@ -18,9 +18,9 @@ export function OverallTab({ data }: { data: OverallReport }) {
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <KpiCard label="Total revenue" value={formatCurrency(k.totalRevenue.current)} compare={k.totalRevenue} />
-        <KpiCard label="Net revenue" value={formatCurrency(k.netRevenue.current)} compare={k.netRevenue} hint="Ticket totals" />
+        <KpiCard label="Net revenue" value={formatCurrency(k.netRevenue.current)} compare={k.netRevenue} hint="Tickets − partial refunds" />
         <KpiCard label="Sales" value={String(k.saleCount.current)} compare={k.saleCount} />
-        <KpiCard label="Avg ticket" value={formatCurrency(k.aov.current)} compare={k.aov} />
+        <KpiCard label="Avg ticket" value={formatCurrency(k.aov.current)} compare={k.aov} hint="Ticket revenue / count" />
         <KpiCard label="Product gross profit" value={formatCurrency(k.productGrossProfit.current)} compare={k.productGrossProfit} />
         <KpiCard label="Service revenue" value={formatCurrency(k.serviceRevenue.current)} compare={k.serviceRevenue} hint="Line mix" />
         <KpiCard label="Product revenue" value={formatCurrency(k.productRevenue.current)} compare={k.productRevenue} hint="Line mix" />

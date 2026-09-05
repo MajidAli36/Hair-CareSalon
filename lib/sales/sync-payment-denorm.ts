@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { computeSalePaymentState } from "@/lib/sales/payment-balance";
+import { roundMoney } from "@/lib/sales/calculate";
 
 /** Recalculate and persist denormalized payment fields on a sale. */
 export async function syncSalePaymentDenorm(
@@ -32,8 +33,12 @@ export async function syncSalePaymentDenorm(
       .eq("organization_id", organizationId),
   ]);
 
-  const paymentsSum = (pays ?? []).reduce((s, p) => s + Number(p.amount), 0);
-  const refundsSum = (refs ?? []).reduce((s, p) => s + Number(p.amount), 0);
+  const paymentsSum = roundMoney(
+    (pays ?? []).reduce((s, p) => s + Number(p.amount), 0)
+  );
+  const refundsSum = roundMoney(
+    (refs ?? []).reduce((s, p) => s + Number(p.amount), 0)
+  );
   const state = computeSalePaymentState({
     total: Number(sale.total),
     paymentsSum,

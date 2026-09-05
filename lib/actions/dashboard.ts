@@ -7,7 +7,8 @@ import { getCustomers } from "@/lib/actions/customers";
 import { getLowStockProducts } from "@/lib/actions/products";
 import { getReportsSummary } from "@/lib/actions/reports";
 import { getFinancialSummary } from "@/lib/actions/finances";
-import { getLocalDateString, addLocalDays, startOfLocalDay } from "@/lib/dates/local";
+import { getLocalDateString, addLocalDays, startOfLocalDay, isoToLocalDateString } from "@/lib/dates/local";
+import { roundMoney } from "@/lib/sales/calculate";
 
 export type DashboardAppointment = {
   id: string;
@@ -116,6 +117,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         .select("customer_id, total")
         .eq("organization_id", org.organizationId)
         .in("status", ["COMPLETED", "AMENDED"])
+        .is("deleted_at", null)
         .not("customer_id", "is", null);
       return data ?? [];
     })().catch(() => [] as { customer_id: string; total: number }[]),
@@ -124,18 +126,19 @@ export async function getDashboardData(): Promise<DashboardData> {
         .from("appointments")
         .select("scheduled_at")
         .eq("organization_id", org.organizationId)
+        .is("deleted_at", null)
         .gte("scheduled_at", thirtyDaysAgo.toISOString());
       return data ?? [];
     })().catch(() => [] as { scheduled_at: string }[]),
   ]);
 
-  const todayRevenue = todayFinancesRaw?.salesRevenue ?? 0;
-  const yesterdayRevenue = yesterdayFinancesRaw?.salesRevenue ?? 0;
+  const todayRevenue = roundMoney(todayFinancesRaw?.salesRevenue ?? 0);
+  const yesterdayRevenue = roundMoney(yesterdayFinancesRaw?.salesRevenue ?? 0);
 
   const appointments = appointmentsRaw.map(mapAppointment);
 
-  const completedStatuses = new Set(["COMPLETED", "CHECKED_IN", "IN_PROGRESS"]);
-  const upcomingStatuses = new Set(["SCHEDULED", "CONFIRMED"]);
+  const completedStatuses = new Set(["COMPLETED"]);
+  const upcomingStatuses = new Set(["SCHEDULED", "CONFIRMED", "CHECKED_IN", "IN_PROGRESS"]);
 
   const appointmentStats = {
     total: appointments.length,
@@ -156,17 +159,19 @@ export async function getDashboardData(): Promise<DashboardData> {
       sale.customer_id,
       (customerSaleCounts.get(sale.customer_id) ?? 0) + 1
     );
-    totalSpend += Number(sale.total);
+    totalSpend = roundMoney(totalSpend + Number(sale.total));
   }
   const customersWithSales = customerSaleCounts.size;
   const returningCustomers = [...customerSaleCounts.values()].filter((c) => c > 1).length;
-  const averageSpend = customersWithSales > 0 ? totalSpend / customersWithSales : 0;
+  // Lifetime average ticket revenue per customer who has purchased
+  const averageSpend =
+    customersWithSales > 0 ? roundMoney(totalSpend / customersWithSales) : 0;
   const retentionRate =
     customersWithSales > 0 ? (returningCustomers / customersWithSales) * 100 : null;
 
   const appointmentsByDayMap: Record<string, number> = {};
   for (const appt of recentAppointments) {
-    const day = appt.scheduled_at.slice(0, 10);
+    const day = isoToLocalDateString(appt.scheduled_at);
     appointmentsByDayMap[day] = (appointmentsByDayMap[day] ?? 0) + 1;
   }
   const appointmentsByDay = Object.entries(appointmentsByDayMap)

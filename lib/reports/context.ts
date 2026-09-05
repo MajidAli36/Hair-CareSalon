@@ -76,6 +76,7 @@ export async function fetchCompletedSales(
     )
     .eq("organization_id", ctx.organizationId)
     .in("status", ["COMPLETED", "AMENDED"])
+    .is("deleted_at", null)
     .gte("completed_at", start.toISOString())
     .lte("completed_at", end.toISOString());
 

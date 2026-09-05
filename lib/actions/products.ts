@@ -46,12 +46,28 @@ export async function createProductCategory(
 export async function deleteProductCategory(id: string): Promise<ActionResult> {
   const org = await requireMinimumRole("MANAGER");
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: row } = await supabase
     .from("product_categories")
-    .delete()
+    .select("id, name")
     .eq("id", id)
-    .eq("organization_id", org.organizationId);
-  if (error) return { error: error.message };
+    .eq("organization_id", org.organizationId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!row) return { error: "Category not found" };
+
+  const { resolveSoftDeleteActor, softDeleteEntity } = await import("@/lib/db/soft-delete");
+  const actor = await resolveSoftDeleteActor();
+  const result = await softDeleteEntity({
+    table: "product_categories",
+    id,
+    organizationId: org.organizationId,
+    actor,
+    action: "product_category.delete",
+    entityType: "product_category",
+    summary: `Deleted product category ${row.name}`,
+    before: row as unknown as Record<string, unknown>,
+  });
+  if (result.error) return { error: result.error };
   revalidatePath("/products");
   return { success: true };
 }
@@ -96,12 +112,29 @@ export async function createProduct(
 export async function deleteProduct(id: string): Promise<ActionResult> {
   const org = await requireMinimumRole("MANAGER");
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: row } = await supabase
     .from("products")
-    .delete()
+    .select("id, name, sku, retail_price, stock_quantity")
     .eq("id", id)
-    .eq("organization_id", org.organizationId);
-  if (error) return { error: error.message };
+    .eq("organization_id", org.organizationId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!row) return { error: "Product not found" };
+
+  const { resolveSoftDeleteActor, softDeleteEntity } = await import("@/lib/db/soft-delete");
+  const actor = await resolveSoftDeleteActor();
+  const result = await softDeleteEntity({
+    table: "products",
+    id,
+    organizationId: org.organizationId,
+    actor,
+    action: "product.delete",
+    entityType: "product",
+    summary: `Deleted product ${row.name}`,
+    before: row as unknown as Record<string, unknown>,
+    extraPatch: { is_active: false },
+  });
+  if (result.error) return { error: result.error };
   revalidatePath("/products");
   return { success: true };
 }
@@ -146,6 +179,7 @@ export async function getProductCategories() {
     .from("product_categories")
     .select("*")
     .eq("organization_id", org.organizationId)
+    .is("deleted_at", null)
     .order("sort_order")
     .order("name");
   if (error) throw new Error(error.message);
@@ -159,6 +193,7 @@ export async function getProducts() {
     .from("products")
     .select("*, category:product_categories(id, name)")
     .eq("organization_id", org.organizationId)
+    .is("deleted_at", null)
     .order("name");
   if (error) throw new Error(error.message);
   return data as unknown as (Product & { category: { id: string; name: string } | null })[];
@@ -207,6 +242,7 @@ export async function getLowStockProducts() {
     .select("id, name, stock_quantity, low_stock_threshold")
     .eq("organization_id", org.organizationId)
     .eq("is_active", true)
+    .is("deleted_at", null)
     .order("stock_quantity");
   if (error) return [];
   return data
@@ -229,18 +265,21 @@ export async function getPosCatalog() {
       .select("id, name, price, duration_minutes")
       .eq("organization_id", org.organizationId)
       .eq("is_active", true)
+      .is("deleted_at", null)
       .order("name"),
     supabase
       .from("products")
       .select("id, name, retail_price, stock_quantity")
       .eq("organization_id", org.organizationId)
       .eq("is_active", true)
+      .is("deleted_at", null)
       .order("name"),
     supabase
       .from("packages")
       .select("id, name, price")
       .eq("organization_id", org.organizationId)
       .eq("is_active", true)
+      .is("deleted_at", null)
       .order("name"),
     supabase
       .from("customers")
@@ -254,6 +293,7 @@ export async function getPosCatalog() {
       .select("id, full_name")
       .eq("organization_id", org.organizationId)
       .eq("is_active", true)
+      .is("deleted_at", null)
       .order("full_name"),
   ]);
 

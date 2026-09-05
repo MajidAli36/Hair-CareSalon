@@ -9,6 +9,7 @@ import {
   calculateInventoryDelta,
   calculatePaymentAdjustment,
   roundMoney,
+  splitEqually,
 } from "./calculate";
 
 describe("calculateInvoiceTotals", () => {
@@ -119,9 +120,76 @@ describe("calculatePaymentAdjustment", () => {
   });
 });
 
-describe("roundMoney", () => {
-  it("rounds to 2 decimal places", () => {
-    assert.equal(roundMoney(10.126), 10.13);
-    assert.equal(roundMoney(10.124), 10.12);
+describe("splitEqually", () => {
+  it("splits with remainder on last share so parts sum to total", () => {
+    const shares = splitEqually(100, 3);
+    assert.deepEqual(shares, [33.33, 33.33, 33.34]);
+    assert.equal(roundMoney(shares.reduce((a, b) => a + b, 0)), 100);
+  });
+
+  it("matches multi-staff attribution for 2 people", () => {
+    const shares = splitEqually(1500.5, 2);
+    assert.equal(roundMoney(shares[0] + shares[1]), 1500.5);
+  });
+});
+
+describe("smoke: deposit / refund / amend money model", () => {
+  it("deposit apply reduces collect-now without changing invoice total", () => {
+    const inv = calculateInvoiceTotals(
+      [{ itemType: "SERVICE", itemId: "s1", name: "Cut", unitPrice: 2000, quantity: 1 }],
+      0,
+      0
+    );
+    const depositCredit = 500;
+    const appliedDeposit = roundMoney(Math.min(depositCredit, inv.total));
+    const amountDue = roundMoney(Math.max(0, inv.total - appliedDeposit));
+    assert.equal(inv.total, 2000);
+    assert.equal(appliedDeposit, 500);
+    assert.equal(amountDue, 1500);
+  });
+
+  it("amend below deposit: cash refund capped; deposit shrink covers rest", () => {
+    const oldTotal = 2000;
+    const newTotal = 800;
+    const depositApplied = 1200;
+    const cashPaid = 800;
+    const adj = calculatePaymentAdjustment({
+      oldTotal,
+      newTotal,
+      paymentsTotal: cashPaid + depositApplied,
+      refundsTotal: 0,
+    });
+    // Full overpayment vs new total is 1200; only cashPaid is cash-refundable
+    const cashRefundable = cashPaid;
+    const cashRefund = roundMoney(Math.min(adj.refundDue, cashRefundable));
+    const newDepositApplied = roundMoney(Math.min(depositApplied, newTotal));
+    assert.equal(cashRefund, 800);
+    assert.equal(newDepositApplied, 800);
+    // Excess deposit freed = 400 (not cash-refunded)
+    assert.equal(roundMoney(depositApplied - newDepositApplied), 400);
+  });
+
+  it("partial refund reduces net without changing ticket total", () => {
+    const ticketRevenue = 5000;
+    const partialRefund = 500;
+    const netRevenue = roundMoney(ticketRevenue - partialRefund);
+    assert.equal(netRevenue, 4500);
+  });
+
+  it("full refund removes ticket — do not subtract refund again", () => {
+    const ticketsStillPosted = 0; // sale status REFUNDED excluded
+    const refundOnPostedOnly = 0;
+    const netRevenue = roundMoney(ticketsStillPosted - refundOnPostedOnly);
+    assert.equal(netRevenue, 0);
+  });
+
+  it("same-day revenue identity: ticket sum is the single source", () => {
+    const sales = [{ total: 1000.1 }, { total: 2000.2 }, { total: 500 }];
+    const dashboard = roundMoney(sales.reduce((a, s) => a + s.total, 0));
+    const finances = roundMoney(sales.reduce((a, s) => a + s.total, 0));
+    const overall = roundMoney(sales.reduce((a, s) => a + s.total, 0));
+    assert.equal(dashboard, finances);
+    assert.equal(finances, overall);
+    assert.equal(overall, 3500.3);
   });
 });

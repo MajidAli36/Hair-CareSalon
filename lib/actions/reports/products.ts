@@ -43,8 +43,9 @@ export async function getProductsReport(from?: string, to?: string): Promise<Pro
   const ctx = await createReportContext(from, to);
   const supabase = await getSupabase();
 
-  const [curRows, prevMetrics, curMetrics] = await Promise.all([
+  const [curRows, prevRows, prevMetrics, curMetrics] = await Promise.all([
     getProductSalesBreakdown(ctx.organizationId, ctx.from, ctx.to),
+    getProductSalesBreakdown(ctx.organizationId, ctx.prevFrom, ctx.prevTo),
     getProductSalesMetrics(ctx.organizationId, ctx.prevFrom, ctx.prevTo),
     getProductSalesMetrics(ctx.organizationId, ctx.from, ctx.to),
   ]);
@@ -82,6 +83,7 @@ export async function getProductsReport(from?: string, to?: string): Promise<Pro
   });
 
   const belowCostCount = detail.filter((d) => d.belowCost).length;
+  const prevBelowCostCount = prevRows.filter((r) => r.grossProfit < 0).length;
   const catMap: Record<string, number> = {};
   for (const row of detail) {
     const key = row.category ?? "Uncategorized";
@@ -98,7 +100,7 @@ export async function getProductsReport(from?: string, to?: string): Promise<Pro
       cogs: cmp(curMetrics.costOfGoodsSold, prevMetrics.costOfGoodsSold),
       grossProfit: cmp(curMetrics.grossProfit, prevMetrics.grossProfit),
       margin: cmp(curMetrics.marginPercent, prevMetrics.marginPercent),
-      belowCostCount: cmp(belowCostCount, 0),
+      belowCostCount: cmp(belowCostCount, prevBelowCostCount),
     },
     top10: detail.slice(0, 10),
     bottom10: [...detail].sort((a, b) => a.revenue - b.revenue).slice(0, 10),

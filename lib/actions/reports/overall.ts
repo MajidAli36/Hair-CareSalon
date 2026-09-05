@@ -1,6 +1,7 @@
 "use server";
 
 import { isoToLocalDateString } from "@/lib/dates/local";
+import { roundMoney } from "@/lib/sales/calculate";
 import {
   getInventoryMoneySnapshot,
   getRevenueSplit,
@@ -45,8 +46,18 @@ export async function getOverallReport(from?: string, to?: string): Promise<Over
 
   const curIds = curSales.map((s) => s.id);
   const prevIds = prevSales.map((s) => s.id);
-  const [curItems, prevItems, curSplit, prevSplit, inventory, prevInventory, refundsCur, refundsPrev] =
-    await Promise.all([
+  const [
+    curItems,
+    prevItems,
+    curSplit,
+    prevSplit,
+    inventory,
+    prevInventory,
+    refundsCur,
+    refundsPrev,
+    saleRefundsCur,
+    saleRefundsPrev,
+  ] = await Promise.all([
       fetchSaleItems(ctx.organizationId, curIds),
       fetchSaleItems(ctx.organizationId, prevIds),
       getRevenueSplit(ctx.organizationId, ctx.from, ctx.to),
@@ -55,10 +66,14 @@ export async function getOverallReport(from?: string, to?: string): Promise<Over
       getInventoryMoneySnapshot(ctx.organizationId, ctx.prevFrom, ctx.prevTo),
       fetchDepositRefunds(ctx.organizationId, ctx.start, ctx.end),
       fetchDepositRefunds(ctx.organizationId, ctx.prevStart, ctx.prevEnd),
+      fetchSaleRefunds(ctx.organizationId, ctx.start, ctx.end, curIds),
+      fetchSaleRefunds(ctx.organizationId, ctx.prevStart, ctx.prevEnd, prevIds),
     ]);
 
-  const sum = (rows: { total: number }[]) => rows.reduce((a, s) => a + s.total, 0);
-  const sumDisc = (rows: { discount: number }[]) => rows.reduce((a, s) => a + s.discount, 0);
+  const sum = (rows: { total: number }[]) =>
+    roundMoney(rows.reduce((a, s) => a + s.total, 0));
+  const sumDisc = (rows: { discount: number }[]) =>
+    roundMoney(rows.reduce((a, s) => a + s.discount, 0));
 
   const totalRevenue = sum(curSales);
   const prevRevenue = sum(prevSales);
@@ -66,24 +81,24 @@ export async function getOverallReport(from?: string, to?: string): Promise<Over
   const prevDiscounts = sumDisc(prevSales);
   const saleCount = curSales.length;
   const prevSaleCount = prevSales.length;
-  const aov = saleCount ? totalRevenue / saleCount : 0;
-  const prevAov = prevSaleCount ? prevRevenue / prevSaleCount : 0;
+  const aov = saleCount ? roundMoney(totalRevenue / saleCount) : 0;
+  const prevAov = prevSaleCount ? roundMoney(prevRevenue / prevSaleCount) : 0;
 
-  // Net revenue ≈ ticket total (already after discount + tax). Discounts shown separately.
-  const netRevenue = totalRevenue;
-  const prevNet = prevRevenue;
+  // Ticket revenue minus partial refunds on still-posted sales (full void/refund already drops tickets)
+  const netRevenue = roundMoney(totalRevenue - saleRefundsCur);
+  const prevNet = roundMoney(prevRevenue - saleRefundsPrev);
 
   const byDay: Record<string, number> = {};
   for (const s of curSales) {
     if (!s.completed_at) continue;
     const day = isoToLocalDateString(s.completed_at);
-    byDay[day] = (byDay[day] ?? 0) + s.total;
+    byDay[day] = roundMoney((byDay[day] ?? 0) + s.total);
   }
 
   const serviceAgg = aggregateByName(curItems.filter((i) => i.item_type === "SERVICE"));
   const productAgg = aggregateByName(curItems.filter((i) => i.item_type === "PRODUCT"));
 
-  void prevItems; // reserved for future mix comparisons
+  void prevItems;
 
   return {
     from: ctx.from,
@@ -115,10 +130,11 @@ export async function getOverallReport(from?: string, to?: string): Promise<Over
     topServices: serviceAgg.slice(0, 10),
     topProducts: productAgg.slice(0, 10),
     notes: [
-      "Ticket revenue uses completed sale totals (after discount, including tax).",
-      "Service / product / package mix uses line totals before sale-level discount allocation.",
+      "Ticket revenue uses completed/amended sale totals (after discount, including tax).",
+      "Net revenue = ticket revenue − partial sale refunds on those same tickets (full void/refund already removes the ticket).",
+      "Service / product / package mix uses line totals (before sale-level discount allocation).",
       "Gross profit is product COGS only — services and packages have no cost model.",
-      "Refunds shown are appointment deposit refunds (no sale-level refund table).",
+      "Deposit refunds are appointment advances returned to customers.",
     ],
   };
 }
@@ -130,7 +146,7 @@ function aggregateByName(
   for (const item of items) {
     const cur = map.get(item.name) ?? { name: item.name, qty: 0, revenue: 0 };
     cur.qty += item.quantity;
-    cur.revenue += item.line_total;
+    cur.revenue = roundMoney(cur.revenue + item.line_total);
     map.set(item.name, cur);
   }
   return [...map.values()].sort((a, b) => b.revenue - a.revenue);
@@ -146,5 +162,31 @@ async function fetchDepositRefunds(organizationId: string, start: Date, end: Dat
     .eq("status", "REFUNDED")
     .gte("refunded_at", start.toISOString())
     .lte("refunded_at", end.toISOString());
-  return (data ?? []).reduce((s, d) => s + (Number(d.amount) || 0), 0);
+  return roundMoney((data ?? []).reduce((s, d) => s + (Number(d.amount) || 0), 0));
+}
+
+async function fetchSaleRefunds(
+  organizationId: string,
+  start: Date,
+  end: Date,
+  postedSaleIds: string[]
+) {
+  if (!postedSaleIds.length) return 0;
+  const { createClient } = await import("@/lib/supabase/server");
+  const supabase = await createClient();
+  let total = 0;
+  for (let i = 0; i < postedSaleIds.length; i += 200) {
+    const chunk = postedSaleIds.slice(i, i + 200);
+    const { data } = await supabase
+      .from("sale_refunds")
+      .select("amount")
+      .eq("organization_id", organizationId)
+      .in("sale_id", chunk)
+      .gte("created_at", start.toISOString())
+      .lte("created_at", end.toISOString());
+    total = roundMoney(
+      total + (data ?? []).reduce((s, d) => s + (Number(d.amount) || 0), 0)
+    );
+  }
+  return total;
 }

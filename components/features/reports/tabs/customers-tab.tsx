@@ -38,10 +38,10 @@ export function CustomersTab({ data }: { data: CustomersReport }) {
         <KpiCard label="Returning (period)" value={String(k.returningCustomers.current)} compare={k.returningCustomers} />
         <KpiCard label="Active" value={String(k.activeCustomers.current)} />
         <KpiCard label="Inactive" value={String(k.inactiveCustomers.current)} invertTrend />
-        <KpiCard label="Avg spend / visit" value={formatCurrency(k.avgSpend.current)} />
+        <KpiCard label="Avg spend / visit" value={formatCurrency(k.avgSpend.current)} hint="Total spend ÷ visits" />
         <KpiCard label="Avg visits" value={k.avgVisits.current.toFixed(1)} />
         <KpiCard label="Avg lifetime value" value={formatCurrency(k.clv.current)} hint="Mean historical spend" />
-        <KpiCard label="Retention rate" value={`${k.retentionRate.current.toFixed(1)}%`} compare={k.retentionRate} />
+        <KpiCard label="Retention rate" value={`${k.retentionRate.current.toFixed(1)}%`} hint="Bought again vs prior period buyers" />
         <KpiCard label="At risk" value={String(k.atRisk.current)} invertTrend hint="60–90 days quiet" />
       </div>
 

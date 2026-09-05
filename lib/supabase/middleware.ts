@@ -51,6 +51,7 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/reports") ||
     pathname.startsWith("/finances") ||
     pathname.startsWith("/whatsapp") ||
+    pathname.startsWith("/feedback") ||
     pathname.startsWith("/settings");
 
   supabaseResponse.headers.set("x-pathname", pathname);

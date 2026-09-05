@@ -11,13 +11,13 @@ import { createClient } from "@/lib/supabase/server";
 import type { ActionResult, CheckoutPayload, SaleStatus } from "@/types/commerce";
 import type { Sale } from "@/types";
 import { hasMinimumRole } from "@/lib/permissions/roles";
-import { roundMoney } from "@/lib/sales/calculate";
+import { calculateInvoiceTotals, roundMoney } from "@/lib/sales/calculate";
 import {
   computeSalePaymentState,
   validateCheckoutPayments,
 } from "@/lib/sales/payment-balance";
 import { syncSalePaymentDenorm } from "@/lib/sales/sync-payment-denorm";
-import { getLocalDateString } from "@/lib/dates/local";
+import { formatCurrency } from "@/lib/format";
 
 async function nextInvoiceNumber(organizationId: string) {
   const supabase = await createClient();
@@ -37,18 +37,59 @@ export async function completeCheckout(
     return { error: "Cart is empty" };
   }
 
-  const subtotal = payload.items.reduce(
-    (sum, item) => sum + item.unitPrice * item.quantity,
-    0
+  const totals = calculateInvoiceTotals(
+    payload.items.map((item) => ({
+      itemType: item.itemType,
+      itemId: item.itemId,
+      name: item.name,
+      unitPrice: item.unitPrice,
+      quantity: item.quantity,
+    })),
+    payload.discount,
+    payload.tax ?? 0
   );
-  const discount = Math.min(Math.max(0, payload.discount), subtotal);
-  const tax = Math.max(0, payload.tax ?? 0);
-  const total = Math.max(0, subtotal - discount + tax);
+  const { subtotal, discount, tax, total } = totals;
 
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // Fail closed on oversell before creating the sale
+  const productLines = payload.items.filter((i) => i.itemType === "PRODUCT");
+  const productCostById = new Map<string, number>();
+  if (productLines.length) {
+    const productIds = [...new Set(productLines.map((i) => i.itemId))];
+    const { data: stockRows } = await supabase
+      .from("products")
+      .select("id, name, stock_quantity, cost_price")
+      .eq("organization_id", org.organizationId)
+      .in("id", productIds);
+    const stockMap = new Map(
+      (stockRows ?? []).map((p) => [
+        p.id,
+        {
+          name: p.name,
+          stock: Number(p.stock_quantity) || 0,
+          cost: Number(p.cost_price) || 0,
+        },
+      ])
+    );
+    const needed = new Map<string, number>();
+    for (const line of productLines) {
+      needed.set(line.itemId, (needed.get(line.itemId) ?? 0) + Number(line.quantity));
+    }
+    for (const [productId, qty] of needed) {
+      const row = stockMap.get(productId);
+      if (!row) return { error: "A product in the cart was not found" };
+      productCostById.set(productId, row.cost);
+      if (qty > row.stock) {
+        return {
+          error: `Insufficient stock for ${row.name} (have ${row.stock}, need ${qty})`,
+        };
+      }
+    }
+  }
 
   let depositApplied = 0;
   let depositRows: { id: string; amount: number }[] = [];
@@ -63,8 +104,10 @@ export async function completeCheckout(
       .is("applied_to_sale_id", null);
 
     depositRows = deposits ?? [];
-    const availableDeposit = depositRows.reduce((sum, d) => sum + Number(d.amount), 0);
-    depositApplied = Math.min(availableDeposit, total);
+    const availableDeposit = roundMoney(
+      depositRows.reduce((sum, d) => sum + Number(d.amount), 0)
+    );
+    depositApplied = roundMoney(Math.min(availableDeposit, total));
   } else if (payload.customerId) {
     const { data: customerDeposits } = await supabase
       .from("appointment_deposits")
@@ -95,8 +138,10 @@ export async function completeCheckout(
         if (grouped.size === 1) {
           const [, onlyRows] = [...grouped.entries()][0];
           depositRows = onlyRows.map((r) => ({ id: r.id, amount: Number(r.amount) }));
-          const availableDeposit = depositRows.reduce((sum, d) => sum + d.amount, 0);
-          depositApplied = Math.min(availableDeposit, total);
+          const availableDeposit = roundMoney(
+            depositRows.reduce((sum, d) => sum + d.amount, 0)
+          );
+          depositApplied = roundMoney(Math.min(availableDeposit, total));
           payload.appointmentId = onlyRows[0].appointment_id;
         }
       }
@@ -105,7 +150,7 @@ export async function completeCheckout(
 
   const linkedAppointmentId = payload.appointmentId || null;
 
-  const amountDue = Math.max(0, total - depositApplied);
+  const amountDue = roundMoney(Math.max(0, total - depositApplied));
 
   const paymentLines =
     payload.payments?.filter((p) => roundMoney(p.amount) > 0) ??
@@ -143,13 +188,25 @@ export async function completeCheckout(
     saleStatus: "COMPLETED",
   });
 
+  const selectedStaffIds = [
+    ...new Set(
+      (payload.staffIds?.length
+        ? payload.staffIds
+        : payload.staffId
+          ? [payload.staffId]
+          : []
+      ).filter((id): id is string => Boolean(id))
+    ),
+  ];
+  const primaryStaffId = selectedStaffIds[0] ?? null;
+
   const { data: sale, error: saleError } = await supabase
     .from("sales")
     .insert({
       organization_id: org.organizationId,
       customer_id: payload.customerId || null,
       appointment_id: linkedAppointmentId,
-      staff_id: payload.staffId || null,
+      staff_id: primaryStaffId,
       status: "COMPLETED",
       subtotal,
       discount,
@@ -170,7 +227,7 @@ export async function completeCheckout(
 
   if (saleError || !sale) return { error: saleError?.message ?? "Failed to create sale" };
 
-  const saleItems = payload.items.map((item) => ({
+  const saleItems = totals.lines.map((item) => ({
     organization_id: org.organizationId,
     sale_id: sale.id,
     item_type: item.itemType,
@@ -178,11 +235,24 @@ export async function completeCheckout(
     name: item.name,
     quantity: item.quantity,
     unit_price: item.unitPrice,
-    line_total: item.unitPrice * item.quantity,
+    line_total: item.lineTotal,
+    unit_cost:
+      item.itemType === "PRODUCT" ? roundMoney(productCostById.get(item.itemId) ?? 0) : 0,
   }));
 
   const { error: itemsError } = await supabase.from("sale_items").insert(saleItems);
   if (itemsError) return { error: itemsError.message };
+
+  if (selectedStaffIds.length > 0) {
+    const { error: saleStaffError } = await supabase.from("sale_staff").insert(
+      selectedStaffIds.map((staffId) => ({
+        sale_id: sale.id,
+        staff_id: staffId,
+        organization_id: org.organizationId,
+      }))
+    );
+    if (saleStaffError) return { error: saleStaffError.message };
+  }
 
   const invoiceNumber = await nextInvoiceNumber(org.organizationId);
   const { error: invoiceError } = await supabase.from("invoices").insert({
@@ -228,13 +298,61 @@ export async function completeCheckout(
     let remaining = depositApplied;
     for (const deposit of depositRows) {
       if (remaining <= 0) break;
-      const applyAmount = Math.min(remaining, Number(deposit.amount));
-      await supabase
-        .from("appointment_deposits")
-        .update({ applied_to_sale_id: sale.id })
-        .eq("id", deposit.id)
-        .eq("organization_id", org.organizationId);
-      remaining -= applyAmount;
+      const depositAmt = roundMoney(Number(deposit.amount));
+      const applyAmount = roundMoney(Math.min(remaining, depositAmt));
+      if (applyAmount <= 0) continue;
+
+      if (applyAmount < depositAmt) {
+        // Partial consume: shrink applied row and keep leftover as a new unused deposit
+        const { error: shrinkErr } = await supabase
+          .from("appointment_deposits")
+          .update({
+            amount: applyAmount,
+            applied_to_sale_id: sale.id,
+          })
+          .eq("id", deposit.id)
+          .eq("organization_id", org.organizationId);
+        if (shrinkErr) return { error: shrinkErr.message };
+
+        const { data: original } = await supabase
+          .from("appointment_deposits")
+          .select(
+            "appointment_id, method, notes, status, payment_reference, proof_path, approved_at, approved_by, paid_at, created_by"
+          )
+          .eq("id", deposit.id)
+          .eq("organization_id", org.organizationId)
+          .maybeSingle();
+
+        if (original) {
+          const leftover = roundMoney(depositAmt - applyAmount);
+          const { error: leftoverErr } = await supabase.from("appointment_deposits").insert({
+            organization_id: org.organizationId,
+            appointment_id: original.appointment_id,
+            amount: leftover,
+            method: original.method,
+            notes: original.notes
+              ? `${original.notes} (leftover after sale apply)`
+              : "Leftover after partial apply to sale",
+            status: original.status,
+            payment_reference: original.payment_reference,
+            proof_path: original.proof_path,
+            approved_at: original.approved_at,
+            approved_by: original.approved_by,
+            applied_to_sale_id: null,
+            paid_at: original.paid_at,
+            created_by: original.created_by,
+          });
+          if (leftoverErr) return { error: leftoverErr.message };
+        }
+      } else {
+        const { error: applyErr } = await supabase
+          .from("appointment_deposits")
+          .update({ applied_to_sale_id: sale.id })
+          .eq("id", deposit.id)
+          .eq("organization_id", org.organizationId);
+        if (applyErr) return { error: applyErr.message };
+      }
+      remaining = roundMoney(remaining - applyAmount);
     }
   }
 
@@ -245,7 +363,7 @@ export async function completeCheckout(
   }
 
   for (const item of payload.items.filter((i) => i.itemType === "PRODUCT")) {
-    await supabase.from("inventory_transactions").insert({
+    const { error: invErr } = await supabase.from("inventory_transactions").insert({
       organization_id: org.organizationId,
       product_id: item.itemId,
       type: "OUT",
@@ -254,6 +372,12 @@ export async function completeCheckout(
       reference_id: sale.id,
       created_by: user?.id ?? null,
     });
+    if (invErr) {
+      return {
+        error: `Sale saved but stock update failed for a product: ${invErr.message}. Void this invoice or adjust inventory.`,
+        saleId: sale.id,
+      };
+    }
   }
 
   revalidatePath("/sales");
@@ -286,6 +410,9 @@ export async function completeCheckout(
     entityType: "sale",
     entityId: sale.id,
     metadata: {
+      summary: `Checkout · ${formatCurrency(total)} · ${payload.items.length} item${
+        payload.items.length === 1 ? "" : "s"
+      }${paymentState.amountDue > 0 ? ` · due ${formatCurrency(paymentState.amountDue)}` : ""}`,
       total,
       itemCount: payload.items.length,
       depositApplied,
@@ -317,15 +444,23 @@ export async function voidSale(
 
   const { data: sale } = await supabase
     .from("sales")
-    .select("id, status, total")
+    .select("id, status, total, customer_id")
     .eq("id", id)
     .eq("organization_id", org.organizationId)
+    .is("deleted_at", null)
     .single();
 
   if (!sale) return { error: "Sale not found" };
   if (sale.status !== "COMPLETED" && sale.status !== "AMENDED") {
     return { error: "Only completed invoices can be voided" };
   }
+
+  const { data: invoice } = await supabase
+    .from("invoices")
+    .select("id, invoice_number")
+    .eq("sale_id", id)
+    .eq("organization_id", org.organizationId)
+    .maybeSingle();
 
   const { data: items } = await supabase
     .from("sale_items")
@@ -357,11 +492,12 @@ export async function voidSale(
     .eq("applied_to_sale_id", id)
     .eq("organization_id", org.organizationId);
 
-  // Reconcile net collected as a full void refund (append-only; do not delete payments)
+  // Reconcile cash/card collected on void — do NOT cash-refund deposit applications
+  // (those deposits are unlinked above so the advance can be reused).
   const [{ data: pays }, { data: refs }] = await Promise.all([
     supabase
       .from("payments")
-      .select("amount")
+      .select("amount, method, reference")
       .eq("sale_id", id)
       .eq("organization_id", org.organizationId),
     supabase
@@ -370,14 +506,17 @@ export async function voidSale(
       .eq("sale_id", id)
       .eq("organization_id", org.organizationId),
   ]);
-  const paid = (pays ?? []).reduce((s, p) => s + Number(p.amount), 0);
+  const cashCollected = (pays ?? []).reduce((s, p) => {
+    if (p.reference === "APPOINTMENT_DEPOSIT") return s;
+    return s + Number(p.amount);
+  }, 0);
   const refunded = (refs ?? []).reduce((s, p) => s + Number(p.amount), 0);
-  const netCollected = Math.round((paid - refunded) * 100) / 100;
-  if (netCollected > 0) {
+  const netCashToRefund = roundMoney(Math.max(0, cashCollected - refunded));
+  if (netCashToRefund > 0) {
     const { error: refundErr } = await supabase.from("sale_refunds").insert({
       organization_id: org.organizationId,
       sale_id: id,
-      amount: netCollected,
+      amount: netCashToRefund,
       method: "CASH",
       reason: `Void — ${voidReason}`,
       reference: "SALE_VOID",
@@ -385,16 +524,13 @@ export async function voidSale(
     });
     if (refundErr) return { error: `Void refund failed: ${refundErr.message}` };
 
-    await supabase.from("expenses").insert({
-      organization_id: org.organizationId,
-      category: "OTHER",
-      amount: netCollected,
-      description: `Voided invoice refund — ${voidReason}`,
-      expense_date: getLocalDateString(),
-      payment_method: "CASH",
-      created_by: user?.id ?? null,
-    });
+    // Do NOT insert an expenses row — void removes the sale from ticket revenue.
+    // Booking refunds as both lost revenue and expense double-hits net profit.
   }
+
+  const { resolveSoftDeleteActor, softDeletePatch } = await import("@/lib/db/soft-delete");
+  const actor = await resolveSoftDeleteActor();
+  const soft = softDeletePatch(actor);
 
   const { error } = await supabase
     .from("sales")
@@ -403,12 +539,21 @@ export async function voidSale(
       voided_at: new Date().toISOString(),
       void_reason: voidReason,
       voided_by: user?.id ?? null,
+      ...soft,
     })
     .eq("id", id)
     .eq("organization_id", org.organizationId)
     .in("status", ["COMPLETED", "AMENDED"]);
 
   if (error) return { error: error.message };
+
+  if (invoice?.id) {
+    await supabase
+      .from("invoices")
+      .update(soft)
+      .eq("id", invoice.id)
+      .eq("organization_id", org.organizationId);
+  }
 
   try {
     await syncSalePaymentDenorm(org.organizationId, id);
@@ -418,11 +563,19 @@ export async function voidSale(
 
   await writeAuditLog({
     organizationId: org.organizationId,
-    userId: user?.id,
+    userId: actor.userId,
+    actorRole: actor.role,
+    actorEmail: actor.email,
     action: "sale.void",
     entityType: "sale",
     entityId: id,
-    metadata: { reason: voidReason, total: sale.total },
+    metadata: {
+      summary: `Voided invoice ${invoice?.invoice_number ?? id.slice(0, 8)}`,
+      reason: voidReason,
+      total: sale.total,
+      invoice_number: invoice?.invoice_number ?? null,
+      before: { status: sale.status, total: sale.total },
+    },
   });
 
   revalidatePath("/sales");
@@ -509,6 +662,7 @@ export async function getSales(
       invoice:invoices(invoice_number)
     `)
     .eq("organization_id", org.organizationId)
+    .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
   if (status) query = query.eq("status", status);
@@ -580,6 +734,7 @@ export async function getSalesTotalForDateRange(start: Date, end: Date) {
     .select("total")
     .eq("organization_id", org.organizationId)
     .in("status", ["COMPLETED", "AMENDED"])
+    .is("deleted_at", null)
     .gte("completed_at", start.toISOString())
     .lte("completed_at", end.toISOString());
 

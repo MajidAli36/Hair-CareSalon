@@ -61,7 +61,7 @@ export async function POST(request: Request) {
         await Promise.all([
           admin.from("sale_items").select("name, quantity, unit_price, line_total").eq("sale_id", saleId),
           admin.from("invoices").select("invoice_number").eq("sale_id", saleId).maybeSingle(),
-          admin.from("payments").select("method, amount").eq("sale_id", saleId),
+          admin.from("payments").select("method, amount, change_given, reference").eq("sale_id", saleId),
           sale.customer_id
             ? admin
                 .from("customers")
@@ -91,7 +91,10 @@ export async function POST(request: Request) {
         tax: Number(sale.tax ?? 0),
         depositApplied: Number(sale.deposit_applied ?? 0),
         total: Number(sale.total),
-        paymentMethod: payments?.[0]?.method ?? "CASH",
+        paymentMethod:
+          (payments ?? []).find((p) => p.reference !== "APPOINTMENT_DEPOSIT")?.method ??
+          payments?.[0]?.method ??
+          "CASH",
         amountPaid:
           sale.amount_paid != null
             ? Number(sale.amount_paid)
@@ -107,6 +110,7 @@ export async function POST(request: Request) {
                     : (payments ?? []).reduce((s, p) => s + Number(p.amount), 0)) +
                   Number(sale.amount_refunded ?? 0)
               ),
+        changeGiven: (payments ?? []).reduce((s, p) => s + (Number(p.change_given) || 0), 0),
       });
 
       receiptData = { type: "receipt", saleId, invoice: invoice?.invoice_number };

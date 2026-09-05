@@ -3,7 +3,7 @@
 import { requireOrganization } from "@/lib/auth/organization";
 import { createClient } from "@/lib/supabase/server";
 import { recordManualAttendance } from "@/lib/actions/staff";
-import { endOfLocalDay, getLocalDateString, startOfLocalDay } from "@/lib/dates/local";
+import { endOfLocalDay, getLocalDateString, isoToLocalDateString, startOfLocalDay } from "@/lib/dates/local";
 
 export type AttendanceRecord = {
   id: string;
@@ -106,9 +106,9 @@ export async function getAttendanceReport(
     }
     const entry = byStaff.get(key)!;
     entry.sessions += 1;
-    entry.days.add(r.check_in_at.slice(0, 10));
+    entry.days.add(isoToLocalDateString(r.check_in_at));
     const mins = sessionDurationMinutes(r.check_in_at, r.check_out_at);
-    if (mins) entry.totalMinutes += mins;
+    if (mins != null) entry.totalMinutes += mins;
   }
 
   const summaries: StaffAttendanceSummary[] = [...byStaff.entries()].map(([staffId, s]) => ({
@@ -125,7 +125,7 @@ export async function getAttendanceReport(
 
   const completedSessions = records.filter((r) => r.check_out_at).length;
   const uniqueStaffDays = new Set(
-    raw.map((r) => `${r.staff_id}:${r.check_in_at.slice(0, 10)}`)
+    raw.map((r) => `${r.staff_id}:${isoToLocalDateString(r.check_in_at)}`)
   ).size;
 
   return {

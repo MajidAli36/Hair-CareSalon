@@ -9,6 +9,7 @@ import { ReportBarChart } from "@/components/features/reports/ui/report-charts";
 import { ReportEmpty } from "@/components/features/reports/ui/report-states";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import Link from "next/link";
 
 export function StaffTab({ data }: { data: StaffReport }) {
   const k = data.kpis;
@@ -75,6 +76,7 @@ export function StaffTab({ data }: { data: StaffReport }) {
                   <TableHead className="text-right">Rate</TableHead>
                   <TableHead className="text-right">Revenue</TableHead>
                   <TableHead className="text-right">Customers</TableHead>
+                  <TableHead className="text-right"> </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -86,6 +88,13 @@ export function StaffTab({ data }: { data: StaffReport }) {
                     <TableCell className="text-right">{r.completionRate.toFixed(0)}%</TableCell>
                     <TableCell className="text-right">{formatCurrency(r.linkedSalesRevenue)}</TableCell>
                     <TableCell className="text-right">{r.customersServed}</TableCell>
+                    <TableCell className="text-right">
+                      {r.staffId ? (
+                        <Button type="button" size="sm" variant="outline" render={<Link href={`/staff/${r.staffId}`} />}>
+                          View
+                        </Button>
+                      ) : null}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

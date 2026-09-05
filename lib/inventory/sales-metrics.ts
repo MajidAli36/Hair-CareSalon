@@ -54,6 +54,7 @@ export async function getProductSalesBreakdown(
     .select("id")
     .eq("organization_id", organizationId)
     .in("status", ["COMPLETED", "AMENDED"])
+    .is("deleted_at", null)
     .gte("completed_at", start.toISOString())
     .lte("completed_at", end.toISOString());
 
@@ -62,7 +63,7 @@ export async function getProductSalesBreakdown(
 
   const { data: lines } = await supabase
     .from("sale_items")
-    .select("item_id, name, quantity, line_total, unit_price")
+    .select("item_id, name, quantity, line_total, unit_price, unit_cost")
     .eq("organization_id", organizationId)
     .eq("item_type", "PRODUCT")
     .in("sale_id", saleIds);
@@ -90,7 +91,14 @@ export async function getProductSalesBreakdown(
 
   const agg = new Map<
     string,
-    { name: string; sku: string | null; qty: number; revenue: number; unitRetail: number }
+    {
+      name: string;
+      sku: string | null;
+      qty: number;
+      revenue: number;
+      unitRetail: number;
+      cogs: number;
+    }
   >();
 
   for (const line of lines) {
@@ -99,10 +107,17 @@ export async function getProductSalesBreakdown(
     const qty = Number(line.quantity) || 0;
     const revenue = Number(line.line_total) || 0;
     const unitRetail = Number(line.unit_price) || 0;
+    // Prefer snapshotted unit_cost; fall back to catalog for any legacy gap
+    const unitCost =
+      line.unit_cost != null && Number(line.unit_cost) >= 0
+        ? Number(line.unit_cost)
+        : meta?.cost ?? 0;
+    const lineCogs = qty * unitCost;
 
     if (existing) {
       existing.qty += qty;
       existing.revenue += revenue;
+      existing.cogs += lineCogs;
     } else {
       agg.set(line.item_id, {
         name: meta?.name ?? line.name,
@@ -110,15 +125,15 @@ export async function getProductSalesBreakdown(
         qty,
         revenue,
         unitRetail: unitRetail || meta?.retail || 0,
+        cogs: lineCogs,
       });
     }
   }
 
   return [...agg.entries()]
     .map(([productId, row]) => {
-      const unitCost = productMap.get(productId)?.cost ?? 0;
-      const cogs = row.qty * unitCost;
-      const profit = row.revenue - cogs;
+      const unitCost = row.qty > 0 ? row.cogs / row.qty : 0;
+      const profit = row.revenue - row.cogs;
       const marginPercent = row.revenue > 0 ? Math.round((profit / row.revenue) * 100) : 0;
       return {
         productId,
@@ -128,7 +143,7 @@ export async function getProductSalesBreakdown(
         retailRevenue: row.revenue,
         unitRetail: row.unitRetail,
         unitCost,
-        costOfGoodsSold: cogs,
+        costOfGoodsSold: row.cogs,
         grossProfit: profit,
         marginPercent,
       };
@@ -150,6 +165,7 @@ export async function getRevenueSplit(
     .select("id")
     .eq("organization_id", organizationId)
     .in("status", ["COMPLETED", "AMENDED"])
+    .is("deleted_at", null)
     .gte("completed_at", start.toISOString())
     .lte("completed_at", end.toISOString());
 
@@ -202,6 +218,7 @@ export async function getProductSalesMetrics(
     .select("id")
     .eq("organization_id", organizationId)
     .in("status", ["COMPLETED", "AMENDED"])
+    .is("deleted_at", null)
     .gte("completed_at", start.toISOString())
     .lte("completed_at", end.toISOString());
 
@@ -218,7 +235,7 @@ export async function getProductSalesMetrics(
 
   const { data: lines } = await supabase
     .from("sale_items")
-    .select("item_id, quantity, line_total")
+    .select("item_id, quantity, line_total, unit_cost")
     .eq("organization_id", organizationId)
     .eq("item_type", "PRODUCT")
     .in("sale_id", saleIds);
@@ -251,10 +268,13 @@ export async function getProductSalesMetrics(
   for (const line of lines) {
     const qty = Number(line.quantity) || 0;
     const revenue = Number(line.line_total) || 0;
-    const cost = costMap.get(line.item_id) ?? 0;
+    const unitCost =
+      line.unit_cost != null && Number(line.unit_cost) >= 0
+        ? Number(line.unit_cost)
+        : costMap.get(line.item_id) ?? 0;
     unitsSold += qty;
     retailRevenue += revenue;
-    costOfGoodsSold += qty * cost;
+    costOfGoodsSold += qty * unitCost;
   }
 
   const grossProfit = retailRevenue - costOfGoodsSold;

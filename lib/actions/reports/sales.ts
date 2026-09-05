@@ -2,6 +2,7 @@
 
 import { getLocalHour, isoToLocalDateString } from "@/lib/dates/local";
 import { formatCustomerName } from "@/lib/format";
+import { roundMoney } from "@/lib/sales/calculate";
 import {
   cmp,
   createReportContext,
@@ -73,16 +74,16 @@ export async function getSalesReport(from?: string, to?: string): Promise<SalesR
     prevSales.map((s) => s.id)
   );
 
-  const total = curSales.reduce((a, s) => a + s.total, 0);
-  const prevTotal = prevSales.reduce((a, s) => a + s.total, 0);
-  const gross = curSales.reduce((a, s) => a + s.subtotal, 0);
-  const prevGross = prevSales.reduce((a, s) => a + s.subtotal, 0);
-  const discounts = curSales.reduce((a, s) => a + s.discount, 0);
-  const prevDiscounts = prevSales.reduce((a, s) => a + s.discount, 0);
+  const total = roundMoney(curSales.reduce((a, s) => a + s.total, 0));
+  const prevTotal = roundMoney(prevSales.reduce((a, s) => a + s.total, 0));
+  const gross = roundMoney(curSales.reduce((a, s) => a + s.subtotal, 0));
+  const prevGross = roundMoney(prevSales.reduce((a, s) => a + s.subtotal, 0));
+  const discounts = roundMoney(curSales.reduce((a, s) => a + s.discount, 0));
+  const prevDiscounts = roundMoney(prevSales.reduce((a, s) => a + s.discount, 0));
   const itemsSold = items.reduce((a, i) => a + i.quantity, 0);
   const prevItemsSold = prevItems.reduce((a, i) => a + i.quantity, 0);
-  const aov = curSales.length ? total / curSales.length : 0;
-  const prevAov = prevSales.length ? prevTotal / prevSales.length : 0;
+  const aov = curSales.length ? roundMoney(total / curSales.length) : 0;
+  const prevAov = prevSales.length ? roundMoney(prevTotal / prevSales.length) : 0;
 
   const byDay: Record<string, number> = {};
   const byHour: Record<string, number> = {};
@@ -92,14 +93,16 @@ export async function getSalesReport(from?: string, to?: string): Promise<SalesR
     if (!s.completed_at) continue;
     const d = new Date(s.completed_at);
     const day = isoToLocalDateString(s.completed_at);
-    byDay[day] = (byDay[day] ?? 0) + s.total;
+    byDay[day] = roundMoney((byDay[day] ?? 0) + s.total);
     const hour = String(getLocalHour(d)).padStart(2, "0");
     byHour[hour] = (byHour[hour] ?? 0) + 1;
   }
 
+  // Cash/card collected only — deposit applications are not new tender
   const payMap: Record<string, number> = {};
   for (const p of payments) {
-    payMap[p.method] = (payMap[p.method] ?? 0) + p.amount;
+    if (p.reference === "APPOINTMENT_DEPOSIT") continue;
+    payMap[p.method] = roundMoney((payMap[p.method] ?? 0) + p.amount);
   }
 
   const itemsBySale = new Map<string, typeof items>();
@@ -111,6 +114,7 @@ export async function getSalesReport(from?: string, to?: string): Promise<SalesR
 
   const primaryPay = new Map<string, string>();
   for (const p of payments) {
+    if (p.reference === "APPOINTMENT_DEPOSIT") continue;
     if (!primaryPay.has(p.sale_id)) primaryPay.set(p.sale_id, p.method);
   }
 
@@ -166,7 +170,8 @@ export async function getSalesReport(from?: string, to?: string): Promise<SalesR
     ledger,
     notes: [
       "Posted revenue includes COMPLETED and AMENDED (current version only). VOID and REFUNDED are excluded.",
-      "Gross sales = sum of subtotals; net sales = sum of ticket totals.",
+      "Gross sales = sum of subtotals; net sales = sum of ticket totals (after discount + tax).",
+      "Payment mix excludes appointment deposit applications (already collected as advances).",
     ],
   };
 }
@@ -200,18 +205,25 @@ async function fetchInvoices(organizationId: string, saleIds: string[]) {
 }
 
 async function fetchPaymentsForSales(organizationId: string, saleIds: string[]) {
-  if (!saleIds.length) return [] as { sale_id: string; method: string; amount: number }[];
+  if (!saleIds.length) {
+    return [] as { sale_id: string; method: string; amount: number; reference: string | null }[];
+  }
   const supabase = await getSupabase();
-  const rows: { sale_id: string; method: string; amount: number }[] = [];
+  const rows: { sale_id: string; method: string; amount: number; reference: string | null }[] = [];
   for (let i = 0; i < saleIds.length; i += 200) {
     const chunk = saleIds.slice(i, i + 200);
     const { data } = await supabase
       .from("payments")
-      .select("sale_id, method, amount")
+      .select("sale_id, method, amount, reference")
       .eq("organization_id", organizationId)
       .in("sale_id", chunk);
     for (const p of data ?? []) {
-      rows.push({ sale_id: p.sale_id, method: p.method, amount: Number(p.amount) || 0 });
+      rows.push({
+        sale_id: p.sale_id,
+        method: p.method,
+        amount: Number(p.amount) || 0,
+        reference: p.reference,
+      });
     }
   }
   return rows;

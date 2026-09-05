@@ -13,6 +13,7 @@ import {
   Settings,
   ShoppingCart,
   Armchair,
+  Star,
   Ticket,
   UserCog,
   Users,
@@ -73,7 +74,10 @@ export const navGroups: NavGroup[] = [
   },
   {
     label: "Communication",
-    items: [{ title: "WhatsApp", href: "/whatsapp", icon: MessageSquare, key: "whatsapp" }],
+    items: [
+      { title: "WhatsApp", href: "/whatsapp", icon: MessageSquare, key: "whatsapp" },
+      { title: "Feedback", href: "/feedback", icon: Star, key: "feedback" },
+    ],
   },
   {
     label: "System",
@@ -99,6 +103,7 @@ export const pageTitles: Record<string, string> = {
   "/reports": "Reports",
   "/finances": "Finances",
   "/whatsapp": "WhatsApp",
+  "/feedback": "Feedback",
   "/settings": "Settings",
 };
 

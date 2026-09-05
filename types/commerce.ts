@@ -31,8 +31,10 @@ export type CheckoutPayload = {
   items: CartItem[];
   customerId?: string | null;
   appointmentId?: string | null;
-  /** Stylist who performed the work (staff performance) */
+  /** Primary stylist (first selected) — kept for receipts / legacy */
   staffId?: string | null;
+  /** All stylists who served on this sale (equal-share reports) */
+  staffIds?: string[];
   discount: number;
   /** Optional flat tax amount in PKR — omit or 0 when not applied */
   tax?: number;

@@ -30,12 +30,12 @@ export function InventoryTab({ data }: { data: InventoryReport }) {
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Value at cost" value={formatCurrency(k.valueAtCost.current)} compare={k.valueAtCost} />
-        <KpiCard label="Value at retail" value={formatCurrency(k.valueAtRetail.current)} compare={k.valueAtRetail} />
-        <KpiCard label="Potential profit" value={formatCurrency(k.potentialProfit.current)} compare={k.potentialProfit} />
+        <KpiCard label="Value at cost" value={formatCurrency(k.valueAtCost.current)} hint="Current on-hand" />
+        <KpiCard label="Value at retail" value={formatCurrency(k.valueAtRetail.current)} hint="Current on-hand" />
+        <KpiCard label="Potential profit" value={formatCurrency(k.potentialProfit.current)} hint="Current on-hand" />
         <KpiCard label="Units sold" value={String(k.unitsSold.current)} compare={k.unitsSold} />
-        <KpiCard label="Low stock" value={String(k.lowStock.current)} invertTrend />
-        <KpiCard label="Out of stock" value={String(k.outOfStock.current)} invertTrend />
+        <KpiCard label="Low stock" value={String(k.lowStock.current)} invertTrend hint="Current" />
+        <KpiCard label="Out of stock" value={String(k.outOfStock.current)} invertTrend hint="Current" />
         <KpiCard label="Product COGS" value={formatCurrency(k.productCogs.current)} compare={k.productCogs} />
         <KpiCard label="Product gross profit" value={formatCurrency(k.productGrossProfit.current)} compare={k.productGrossProfit} />
       </div>
