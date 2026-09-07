@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
+import { PaymentStatusFilter } from "@/components/features/sales/payment-status-filter";
 
 export function SalesSearch() {
   const router = useRouter();
@@ -29,15 +30,18 @@ export function SalesSearch() {
   );
 
   return (
-    <div className="relative max-w-md flex-1">
-      <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-      <Input
-        placeholder="Search invoice, customer, phone…"
-        className="pl-9"
-        value={value}
-        onChange={(e) => handleSearch(e.target.value)}
-        disabled={isPending}
-      />
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="relative max-w-md flex-1">
+        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Search invoice, customer, phone…"
+          className="pl-9"
+          value={value}
+          onChange={(e) => handleSearch(e.target.value)}
+          disabled={isPending}
+        />
+      </div>
+      <PaymentStatusFilter />
     </div>
   );
 }

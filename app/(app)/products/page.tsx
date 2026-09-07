@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   getInventorySummaryStats,
   getInventoryTransactions,
@@ -14,10 +15,21 @@ import {
   ProductCategoriesTable,
   ProductsTable,
 } from "@/components/features/products/products-lists";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-export default async function ProductsPage() {
+type ProductsPageProps = {
+  searchParams: Promise<{ usage?: string }>;
+};
+
+export default async function ProductsPage({ searchParams }: ProductsPageProps) {
+  const params = await searchParams;
+  const usageFilter =
+    params.usage === "RETAIL" || params.usage === "SALON" || params.usage === "BOTH"
+      ? params.usage
+      : "ALL";
+
   const [categories, products, transactions, inventorySummary, canManage] = await Promise.all([
     getProductCategories(),
     getProducts(),
@@ -26,12 +38,23 @@ export default async function ProductsPage() {
     canManageRecords(),
   ]);
 
+  const filtered =
+    usageFilter === "ALL"
+      ? products
+      : products.filter((p) => (p.usage_kind ?? "BOTH") === usageFilter);
+
+  const retailCount = products.filter((p) => (p.usage_kind ?? "BOTH") === "RETAIL").length;
+  const salonCount = products.filter((p) => (p.usage_kind ?? "BOTH") === "SALON").length;
+  const bothCount = products.filter((p) => (p.usage_kind ?? "BOTH") === "BOTH").length;
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Products</h1>
         <p className="text-muted-foreground">
-          Retail catalog, stock levels, and inventory value (cost vs retail).
+          Keep <span className="font-medium text-foreground">Customer</span> products (POS) and{" "}
+          <span className="font-medium text-foreground">In-house</span> products (used inside
+          services) separate. Stock stays on one inventory ledger.
         </p>
       </div>
 
@@ -48,8 +71,8 @@ export default async function ProductsPage() {
               <CardHeader>
                 <CardTitle>Add product</CardTitle>
                 <CardDescription>
-                  Set cost (your purchase price) and retail (POS price). Stock value is calculated
-                  from both.
+                  Choose type: Customer (POS), In-house (Services → Salon stock), or Both. Set cost
+                  for inventory value; retail is for POS selling price.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -61,11 +84,41 @@ export default async function ProductsPage() {
             <CardHeader>
               <CardTitle>All products</CardTitle>
               <CardDescription>
-                &quot;Stock value&quot; = current stock × cost price. POS uses retail price.
+                Filter by type. In-house items do not appear on POS; Customer items do not appear in
+                Salon stock linking.
               </CardDescription>
+              <div className="flex flex-wrap gap-2 pt-2">
+                {(
+                  [
+                    ["ALL", `All (${products.length})`],
+                    ["RETAIL", `Customer (${retailCount})`],
+                    ["SALON", `In-house (${salonCount})`],
+                    ["BOTH", `Both (${bothCount})`],
+                  ] as const
+                ).map(([key, label]) => (
+                  <Button
+                    key={key}
+                    size="sm"
+                    variant={usageFilter === key ? "default" : "outline"}
+                    render={
+                      <Link
+                        href={
+                          key === "ALL" ? "/products" : `/products?usage=${key}`
+                        }
+                      />
+                    }
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
             </CardHeader>
             <CardContent>
-              <ProductsTable products={products} canManage={canManage} />
+              <ProductsTable
+                products={filtered}
+                categories={categories}
+                canManage={canManage}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -99,8 +152,8 @@ export default async function ProductsPage() {
               <CardHeader>
                 <CardTitle>Adjust stock</CardTitle>
                 <CardDescription>
-                  Stock In adds units, Stock Out removes, Adjustment sets exact count. Value uses
-                  current cost price × quantity.
+                  Stock In adds units, Stock Out removes, Adjustment sets exact count. Works for
+                  Customer and In-house products.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -122,7 +175,7 @@ export default async function ProductsPage() {
             <CardHeader>
               <CardTitle>Recent transactions</CardTitle>
               <CardDescription>
-                POS sales auto-record Stock Out. Value column = qty × cost price at time of view.
+                POS retail sales and service salon-use both record Stock Out.
               </CardDescription>
             </CardHeader>
             <CardContent>

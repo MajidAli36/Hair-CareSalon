@@ -74,6 +74,7 @@ export async function getDuesReport(from?: string, to?: string): Promise<DuesRep
     )
     .eq("organization_id", ctx.organizationId)
     .in("status", ["COMPLETED", "AMENDED"])
+    .is("deleted_at", null)
     .gt("amount_due", 0)
     .order("completed_at", { ascending: true });
 
@@ -147,21 +148,46 @@ export async function getDuesReport(from?: string, to?: string): Promise<DuesRep
   const [{ data: todayPays }, { data: monthPays }] = await Promise.all([
     supabase
       .from("payments")
-      .select("amount, reference")
+      .select("amount, reference, sale_id")
       .eq("organization_id", ctx.organizationId)
       .gte("paid_at", startOfLocalDay(today).toISOString())
       .lte("paid_at", endOfLocalDay(today).toISOString()),
     supabase
       .from("payments")
-      .select("amount, reference")
+      .select("amount, reference, sale_id")
       .eq("organization_id", ctx.organizationId)
       .gte("paid_at", startOfLocalDay(monthStart).toISOString()),
   ]);
 
-  const sumTender = (rows: { amount: number | string; reference: string | null }[] | null) =>
+  const paySaleIds = [
+    ...new Set(
+      [...(todayPays ?? []), ...(monthPays ?? [])]
+        .map((p) => p.sale_id)
+        .filter(Boolean) as string[]
+    ),
+  ];
+  const liveSaleIds = new Set<string>();
+  if (paySaleIds.length) {
+    for (let i = 0; i < paySaleIds.length; i += 200) {
+      const chunk = paySaleIds.slice(i, i + 200);
+      const { data: paySales } = await supabase
+        .from("sales")
+        .select("id, status, deleted_at")
+        .eq("organization_id", ctx.organizationId)
+        .in("id", chunk);
+      for (const s of paySales ?? []) {
+        if (!s.deleted_at && s.status !== "VOID") liveSaleIds.add(s.id);
+      }
+    }
+  }
+
+  const sumTender = (
+    rows: { amount: number | string; reference: string | null; sale_id: string }[] | null
+  ) =>
     roundMoney(
       (rows ?? []).reduce((a, p) => {
         if (p.reference === "APPOINTMENT_DEPOSIT") return a;
+        if (p.sale_id && !liveSaleIds.has(p.sale_id)) return a;
         return a + Number(p.amount);
       }, 0)
     );
@@ -187,6 +213,7 @@ export async function getDuesReport(from?: string, to?: string): Promise<DuesRep
     ledger,
     notes: [
       "Outstanding = invoice total − payments + refunds on posted sales (COMPLETED/AMENDED).",
+      "Soft-deleted (admin delete) and VOID invoices are excluded from dues and collected cash.",
       "Revenue reports still use invoice totals — not cash collected.",
       "Overdue threshold: more than 7 days since completion.",
     ],

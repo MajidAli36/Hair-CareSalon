@@ -88,7 +88,7 @@ export async function getFinanceReport(from?: string, to?: string): Promise<Fina
       "Net profit = ticket revenue − partial sale refunds − operating expenses − staff payments − product COGS.",
       "Full void/refund removes the ticket from revenue (not also booked as an operating expense).",
       "Appointment advances are tracked separately and are not added on top of ticket revenue in net profit.",
-      "Service/package COGS is unavailable — only product cost is deducted.",
+      "Service/package labor COGS is not modeled — product COGS includes retail sales + salon stock used inside services.",
       "Manage expense entry on the Finances page.",
     ],
   };

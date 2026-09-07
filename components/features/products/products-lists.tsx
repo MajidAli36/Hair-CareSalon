@@ -4,6 +4,7 @@ import {
   DeleteProductButton,
   DeleteProductCategoryButton,
 } from "@/components/features/products/product-actions";
+import { EditProductButton } from "@/components/features/products/edit-product-dialog";
 import { Badge } from "@/components/ui/badge";
 import { PaginatedList } from "@/components/ui/table-pagination";
 import {
@@ -36,9 +37,11 @@ type TransactionRow = {
 
 export function ProductsTable({
   products,
+  categories,
   canManage,
 }: {
   products: ProductRow[];
+  categories: ProductCategory[];
   canManage: boolean;
 }) {
   return (
@@ -52,6 +55,7 @@ export function ProductsTable({
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
+                <TableHead>Type</TableHead>
                 <TableHead>SKU</TableHead>
                 <TableHead className="text-right">Cost</TableHead>
                 <TableHead className="text-right">Retail</TableHead>
@@ -59,15 +63,33 @@ export function ProductsTable({
                 <TableHead className="text-right">Stock</TableHead>
                 <TableHead className="text-right">Stock value</TableHead>
                 <TableHead>Status</TableHead>
-                {canManage && <TableHead />}
+                {canManage && <TableHead className="w-[160px]">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {slice.map((p) => {
                 const v = getProductValuation(p);
+                const kind = p.usage_kind ?? "BOTH";
                 return (
                   <TableRow key={p.id}>
                     <TableCell className="font-medium">{p.name}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          kind === "SALON"
+                            ? "secondary"
+                            : kind === "RETAIL"
+                              ? "default"
+                              : "outline"
+                        }
+                      >
+                        {kind === "SALON"
+                          ? "In-house"
+                          : kind === "RETAIL"
+                            ? "Customer"
+                            : "Both"}
+                      </Badge>
+                    </TableCell>
                     <TableCell>{p.sku ?? "—"}</TableCell>
                     <TableCell className="text-right text-muted-foreground">
                       {formatCurrency(v.costPrice)}
@@ -104,7 +126,10 @@ export function ProductsTable({
                     </TableCell>
                     {canManage && (
                       <TableCell>
-                        <DeleteProductButton id={p.id} />
+                        <div className="flex items-center gap-2">
+                          <EditProductButton product={p} categories={categories} />
+                          <DeleteProductButton id={p.id} name={p.name} />
+                        </div>
                       </TableCell>
                     )}
                   </TableRow>

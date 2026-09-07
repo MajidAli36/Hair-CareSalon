@@ -1,24 +1,39 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { getSales } from "@/lib/actions/sales";
-import { canManageRecords, canUsePos } from "@/lib/auth/permissions";
+import { canAdminDeleteSales, canManageRecords, canUsePos } from "@/lib/auth/permissions";
 import { SalesTableCard } from "@/components/features/sales/sales-table";
 import { SalesSearch } from "@/components/features/sales/sales-search";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import type { SalePaymentStatus } from "@/types/commerce";
+
+const PAYMENT_STATUSES = new Set<SalePaymentStatus>([
+  "UNPAID",
+  "PARTIALLY_PAID",
+  "PAID",
+  "PARTIALLY_REFUNDED",
+  "REFUNDED",
+]);
 
 type SalesPageProps = {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; payment_status?: string }>;
 };
 
 export default async function SalesPage({ searchParams }: SalesPageProps) {
   const params = await searchParams;
   const q = params.q?.trim() || undefined;
+  const paymentRaw = params.payment_status?.trim();
+  const paymentStatus =
+    paymentRaw && PAYMENT_STATUSES.has(paymentRaw as SalePaymentStatus)
+      ? (paymentRaw as SalePaymentStatus)
+      : undefined;
 
-  const [sales, canManage, canPos] = await Promise.all([
-    getSales({ search: q }),
+  const [sales, canManage, canPos, canAdminDelete] = await Promise.all([
+    getSales({ search: q, paymentStatus, includeDeleted: true }),
     canManageRecords(),
     canUsePos(),
+    canAdminDeleteSales(),
   ]);
 
   const rows = sales.map((sale) => {
@@ -27,6 +42,7 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
       amount_paid?: number;
       amount_due?: number;
       payment_version?: number;
+      deleted_at?: string | null;
     };
     return {
       id: s.id,
@@ -38,6 +54,7 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
       payment_version: s.payment_version,
       completed_at: s.completed_at,
       created_at: s.created_at,
+      deleted_at: s.deleted_at ?? null,
       customer: s.customer as {
         first_name: string;
         last_name: string | null;
@@ -50,6 +67,10 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
     };
   });
 
+  const filterHint = [q ? `“${q}”` : null, paymentStatus ? paymentStatus.replaceAll("_", " ") : null]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -57,7 +78,7 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
           <h1 className="text-2xl font-bold tracking-tight">Sales</h1>
           <p className="text-muted-foreground">
             View invoices, collect dues, amend, refund, or void. Payment status is separate from
-            sale status.
+            sale status. Deleted invoices stay listed but are locked.
           </p>
         </div>
         <Button render={<Link href="/pos" />}>New sale</Button>
@@ -71,9 +92,10 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
         sales={rows}
         canManage={canManage}
         canReceivePayment={canPos || canManage}
+        canAdminDelete={canAdminDelete}
         emptyLabel={
-          q
-            ? `No sales match “${q}”. Try invoice number, customer name, or phone.`
+          filterHint
+            ? `No sales match ${filterHint}. Try invoice number, customer name, phone, or payment status.`
             : undefined
         }
       />

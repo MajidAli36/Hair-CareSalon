@@ -8,7 +8,12 @@ import { queueOpenCashDrawer } from "@/lib/devices/cash-drawer";
 import { requireMinimumRole } from "@/lib/auth/permissions";
 import { requireOrganization } from "@/lib/auth/organization";
 import { createClient } from "@/lib/supabase/server";
-import type { ActionResult, CheckoutPayload, SaleStatus } from "@/types/commerce";
+import type {
+  ActionResult,
+  CheckoutPayload,
+  SalePaymentStatus,
+  SaleStatus,
+} from "@/types/commerce";
 import type { Sale } from "@/types";
 import { hasMinimumRole } from "@/lib/permissions/roles";
 import { calculateInvoiceTotals, roundMoney } from "@/lib/sales/calculate";
@@ -55,40 +60,40 @@ export async function completeCheckout(
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Fail closed on oversell before creating the sale
+  // Fail closed on oversell before creating the sale (retail products + service salon use)
   const productLines = payload.items.filter((i) => i.itemType === "PRODUCT");
   const productCostById = new Map<string, number>();
-  if (productLines.length) {
-    const productIds = [...new Set(productLines.map((i) => i.itemId))];
-    const { data: stockRows } = await supabase
-      .from("products")
-      .select("id, name, stock_quantity, cost_price")
-      .eq("organization_id", org.organizationId)
-      .in("id", productIds);
-    const stockMap = new Map(
-      (stockRows ?? []).map((p) => [
-        p.id,
-        {
-          name: p.name,
-          stock: Number(p.stock_quantity) || 0,
-          cost: Number(p.cost_price) || 0,
-        },
-      ])
+  const retailNeeded = new Map<string, number>();
+  for (const line of productLines) {
+    retailNeeded.set(
+      line.itemId,
+      (retailNeeded.get(line.itemId) ?? 0) + Number(line.quantity)
     );
-    const needed = new Map<string, number>();
-    for (const line of productLines) {
-      needed.set(line.itemId, (needed.get(line.itemId) ?? 0) + Number(line.quantity));
-    }
-    for (const [productId, qty] of needed) {
-      const row = stockMap.get(productId);
-      if (!row) return { error: "A product in the cart was not found" };
-      productCostById.set(productId, row.cost);
-      if (qty > row.stock) {
-        return {
-          error: `Insufficient stock for ${row.name} (have ${row.stock}, need ${qty})`,
-        };
-      }
-    }
+  }
+
+  const {
+    resolveServiceConsumableNeeds,
+    mergeStockNeeds,
+    assertStockAvailable,
+    applySaleConsumableUsages,
+  } = await import("@/lib/inventory/service-consumables");
+
+  const consumableResolved = await resolveServiceConsumableNeeds(
+    org.organizationId,
+    payload.items.map((i) => ({
+      itemType: i.itemType,
+      itemId: i.itemId,
+      quantity: i.quantity,
+    }))
+  );
+  if (consumableResolved.error) return { error: consumableResolved.error };
+  const consumableNeeds = consumableResolved.needs;
+
+  const stockNeeded = mergeStockNeeds(retailNeeded, consumableNeeds);
+  if (stockNeeded.size) {
+    const stockCheck = await assertStockAvailable(org.organizationId, stockNeeded);
+    if (stockCheck.error) return { error: stockCheck.error };
+    for (const [id, cost] of stockCheck.costById) productCostById.set(id, cost);
   }
 
   let depositApplied = 0;
@@ -380,6 +385,21 @@ export async function completeCheckout(
     }
   }
 
+  if (consumableNeeds.length) {
+    const consumableApply = await applySaleConsumableUsages({
+      organizationId: org.organizationId,
+      saleId: sale.id,
+      needs: consumableNeeds,
+      userId: user?.id ?? null,
+    });
+    if (consumableApply.error) {
+      return {
+        error: `Sale saved but salon stock update failed: ${consumableApply.error}. Void this invoice or adjust inventory.`,
+        saleId: sale.id,
+      };
+    }
+  }
+
   revalidatePath("/sales");
   revalidatePath("/reports");
   revalidatePath("/finances");
@@ -485,6 +505,17 @@ export async function voidSale(
     if (invErr) return { error: `Inventory restore failed: ${invErr.message}` };
   }
 
+  const { reverseSaleConsumableUsages } = await import("@/lib/inventory/service-consumables");
+  const consumableRestore = await reverseSaleConsumableUsages({
+    organizationId: org.organizationId,
+    saleId: id,
+    userId: user?.id ?? null,
+    referenceType: "sale_void_consumable",
+  });
+  if (consumableRestore.error) {
+    return { error: `Salon stock restore failed: ${consumableRestore.error}` };
+  }
+
   // Unlink applied deposits so they can be reused or refunded separately
   await supabase
     .from("appointment_deposits")
@@ -586,8 +617,147 @@ export async function voidSale(
   return { success: true };
 }
 
+/**
+ * Admin-only soft-delete for removing test / erroneous invoices from active books.
+ * Row stays visible on Sales (disabled). Restores product stock, unlinks deposits.
+ * Does not cash-refund (use Void when money must leave the till).
+ */
+export async function adminDeleteSale(
+  id: string,
+  reason?: string
+): Promise<ActionResult> {
+  const org = await requireMinimumRole("ADMIN");
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const deleteReason = (reason ?? "").trim();
+  if (deleteReason.length < 3) {
+    return { error: "Delete reason is required (min 3 characters)" };
+  }
+
+  const { data: sale } = await supabase
+    .from("sales")
+    .select("id, status, total, customer_id, deleted_at")
+    .eq("id", id)
+    .eq("organization_id", org.organizationId)
+    .single();
+
+  if (!sale) return { error: "Sale not found" };
+  if (sale.deleted_at) return { error: "Invoice is already deleted" };
+  if (sale.status === "DRAFT") {
+    return { error: "Draft sales cannot be deleted this way" };
+  }
+
+  const { data: invoice } = await supabase
+    .from("invoices")
+    .select("id, invoice_number")
+    .eq("sale_id", id)
+    .eq("organization_id", org.organizationId)
+    .maybeSingle();
+
+  const { data: items } = await supabase
+    .from("sale_items")
+    .select("item_type, item_id, quantity")
+    .eq("sale_id", id)
+    .eq("organization_id", org.organizationId);
+
+  for (const item of (items ?? []).filter((i) => i.item_type === "PRODUCT")) {
+    const qty = Number(item.quantity) || 0;
+    if (qty <= 0) continue;
+    const { error: invErr } = await supabase.from("inventory_transactions").insert({
+      organization_id: org.organizationId,
+      product_id: item.item_id,
+      type: "IN",
+      quantity: qty,
+      reference_type: "sale_admin_delete",
+      reference_id: id,
+      notes: `Admin delete restore — ${deleteReason}`,
+      created_by: user?.id ?? null,
+    });
+    if (invErr) return { error: `Inventory restore failed: ${invErr.message}` };
+  }
+
+  const { reverseSaleConsumableUsages } = await import("@/lib/inventory/service-consumables");
+  const consumableRestore = await reverseSaleConsumableUsages({
+    organizationId: org.organizationId,
+    saleId: id,
+    userId: user?.id ?? null,
+    referenceType: "sale_admin_delete_consumable",
+  });
+  if (consumableRestore.error) {
+    return { error: `Salon stock restore failed: ${consumableRestore.error}` };
+  }
+
+  await supabase
+    .from("appointment_deposits")
+    .update({ applied_to_sale_id: null })
+    .eq("applied_to_sale_id", id)
+    .eq("organization_id", org.organizationId);
+
+  const { resolveSoftDeleteActor, softDeletePatch } = await import("@/lib/db/soft-delete");
+  const actor = await resolveSoftDeleteActor();
+  const soft = softDeletePatch(actor);
+
+  const { error } = await supabase
+    .from("sales")
+    .update(soft)
+    .eq("id", id)
+    .eq("organization_id", org.organizationId)
+    .is("deleted_at", null);
+
+  if (error) return { error: error.message };
+
+  if (invoice?.id) {
+    await supabase
+      .from("invoices")
+      .update(soft)
+      .eq("id", invoice.id)
+      .eq("organization_id", org.organizationId);
+  }
+
+  await writeAuditLog({
+    organizationId: org.organizationId,
+    userId: actor.userId,
+    actorRole: actor.role,
+    actorEmail: actor.email,
+    action: "sale.admin_delete",
+    entityType: "sale",
+    entityId: id,
+    metadata: {
+      summary: `Admin deleted invoice ${invoice?.invoice_number ?? id.slice(0, 8)}`,
+      reason: deleteReason,
+      total: sale.total,
+      invoice_number: invoice?.invoice_number ?? null,
+      before: { status: sale.status, total: sale.total },
+    },
+  });
+
+  revalidatePath("/sales");
+  revalidatePath("/reports");
+  revalidatePath("/finances");
+  revalidatePath("/products");
+  revalidatePath("/dashboard");
+  revalidatePath("/customers");
+  revalidatePath(`/sales/${id}`);
+  if (sale.customer_id) {
+    revalidatePath(`/customers/${sale.customer_id}`);
+    revalidatePath(`/customers/${sale.customer_id}/statement`);
+  }
+  return { success: true };
+}
+
 export async function getSales(
-  statusOrOptions?: SaleStatus | { status?: SaleStatus; search?: string }
+  statusOrOptions?:
+    | SaleStatus
+    | {
+        status?: SaleStatus;
+        search?: string;
+        paymentStatus?: SalePaymentStatus;
+        /** When true (default for list), include soft-deleted rows as disabled */
+        includeDeleted?: boolean;
+      }
 ) {
   const org = await requireOrganization();
   const supabase = await createClient();
@@ -595,7 +765,7 @@ export async function getSales(
     typeof statusOrOptions === "string"
       ? { status: statusOrOptions }
       : statusOrOptions ?? {};
-  const { status, search } = options;
+  const { status, search, paymentStatus, includeDeleted = false } = options;
 
   let saleIds: string[] | null = null;
 
@@ -662,10 +832,13 @@ export async function getSales(
       invoice:invoices(invoice_number)
     `)
     .eq("organization_id", org.organizationId)
-    .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
+  if (!includeDeleted) {
+    query = query.is("deleted_at", null);
+  }
   if (status) query = query.eq("status", status);
+  if (paymentStatus) query = query.eq("payment_status", paymentStatus);
   if (saleIds) query = query.in("id", saleIds);
 
   const { data, error } = await query;
@@ -717,6 +890,25 @@ export async function getSale(id: string) {
     invoice: { invoice_number: string; issued_at: string } | { invoice_number: string; issued_at: string }[] | null;
     payments: { method: string; amount: number; paid_at: string; reference?: string | null }[];
   };
+}
+
+/** Salon products deducted for services on this sale (not retail lines). */
+export async function getSaleConsumableUsages(saleId: string) {
+  const org = await requireOrganization();
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("sale_consumable_usages")
+    .select("id, product_id, quantity, unit_cost, product:products(id, name, sku)")
+    .eq("organization_id", org.organizationId)
+    .eq("sale_id", saleId);
+  if (error) throw new Error(error.message);
+  return (data ?? []) as unknown as {
+    id: string;
+    product_id: string;
+    quantity: number;
+    unit_cost: number;
+    product: { id: string; name: string; sku: string | null } | null;
+  }[];
 }
 
 export async function getTodaySalesTotal() {

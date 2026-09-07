@@ -5,7 +5,7 @@ export { getCustomersReport, type CustomersReport } from "./customers";
 export { getAppointmentsReport, type AppointmentsReport } from "./appointments";
 export { getStaffReport, getStaffMonthlyDetail, type StaffReport, type StaffMonthlyDetail } from "./staff";
 export { getInventoryReport, type InventoryReport } from "./inventory";
-export { getProductsReport, type ProductsReport } from "./products";
+export { getProductsReport, type ProductsReport, type ProductReportRow } from "./products";
 export { getFinanceReport, type FinanceReport } from "./finance";
 export { getPaymentsReport, type PaymentsReport } from "./payments";
 export { getDuesReport, type DuesReport } from "./dues";

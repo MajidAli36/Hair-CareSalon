@@ -12,9 +12,10 @@ import {
   Ban,
   Undo2,
   Banknote,
+  Trash2,
 } from "lucide-react";
 import { printSaleReceipt } from "@/components/features/sales/print-receipt-button";
-import { voidSale } from "@/lib/actions/sales";
+import { adminDeleteSale, voidSale } from "@/lib/actions/sales";
 import { refundSale } from "@/lib/actions/sales-lifecycle";
 import { isPostedSaleStatus } from "@/lib/sales/lifecycle";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,7 @@ type SalesActionsMenuProps = {
   invoiceLabel?: string;
   canManage: boolean;
   canReceivePayment?: boolean;
+  canAdminDelete?: boolean;
   onReceivePayment?: () => void;
 };
 
@@ -53,14 +55,17 @@ export function SalesActionsMenu({
   status,
   total,
   amountDue = 0,
+  invoiceLabel,
   canManage,
   canReceivePayment = false,
+  canAdminDelete = false,
   onReceivePayment,
 }: SalesActionsMenuProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [voidOpen, setVoidOpen] = useState(false);
   const [refundOpen, setRefundOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [refundAmount, setRefundAmount] = useState(String(total));
   const [error, setError] = useState<string | null>(null);
@@ -150,6 +155,22 @@ export function SalesActionsMenu({
                 </DropdownMenuItem>
               </>
             ) : null}
+            {canAdminDelete ? (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  variant="destructive"
+                  onClick={() => {
+                    setError(null);
+                    setReason("");
+                    setDeleteOpen(true);
+                  }}
+                >
+                  <Trash2 className="size-3.5" />
+                  Delete invoice
+                </DropdownMenuItem>
+              </>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -193,6 +214,57 @@ export function SalesActionsMenu({
               }
             >
               {pending ? "Voiding…" : "Void invoice"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete invoice</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Admin and Owner only. Soft-deletes this invoice for test/cleanup cases. It stays visible
+            on Sales but locked. Product stock is restored. No cash refund is issued — use Void if
+            money must leave the till.
+            {invoiceLabel ? (
+              <>
+                {" "}
+                Invoice: <span className="font-medium text-foreground">{invoiceLabel}</span>
+              </>
+            ) : null}
+          </p>
+          <div className="space-y-2">
+            <Label htmlFor="delete-reason">Reason</Label>
+            <Textarea
+              id="delete-reason"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="e.g. Production test invoice — remove from books"
+            />
+          </div>
+          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={pending}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={pending}
+              onClick={() =>
+                startTransition(async () => {
+                  const res = await adminDeleteSale(saleId, reason);
+                  if (res.error) {
+                    setError(res.error);
+                    return;
+                  }
+                  setDeleteOpen(false);
+                  router.refresh();
+                })
+              }
+            >
+              {pending ? "Deleting…" : "Delete invoice"}
             </Button>
           </DialogFooter>
         </DialogContent>

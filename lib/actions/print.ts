@@ -37,6 +37,7 @@ export async function getSaleReceiptHtml(saleId: string): Promise<string | null>
   await requireOrganization();
   const sale = await getSale(saleId);
   if (!sale || (sale.status !== "COMPLETED" && sale.status !== "AMENDED")) return null;
+  if ((sale as { deleted_at?: string | null }).deleted_at) return null;
 
   const business = await getBusinessInfo();
   const customer = sale.customer as {

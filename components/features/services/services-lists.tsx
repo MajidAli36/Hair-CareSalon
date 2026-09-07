@@ -5,6 +5,8 @@ import {
   DeletePackageButton,
   DeleteServiceButton,
 } from "@/components/features/services/delete-buttons";
+import { EditServiceButton } from "@/components/features/services/edit-service-dialog";
+import { ServiceConsumablesButton } from "@/components/features/services/service-consumables-dialog";
 import { Badge } from "@/components/ui/badge";
 import { PaginatedList } from "@/components/ui/table-pagination";
 import {
@@ -16,14 +18,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatCurrency, formatDuration } from "@/lib/format";
+import type { ServiceCategory } from "@/types";
 
 type ServiceRow = {
   id: string;
   name: string;
+  description: string | null;
   price: number;
   duration_minutes: number;
   is_active: boolean;
-  category: { name: string } | null;
+  category_id: string | null;
+  category: { id?: string; name: string } | null;
 };
 
 type CategoryRow = {
@@ -45,12 +50,25 @@ type PackageRow = {
   }[] | null;
 };
 
+type ProductOption = {
+  id: string;
+  name: string;
+  stock_quantity: number;
+  sku: string | null;
+};
+
 export function ServicesTable({
   services,
+  categories,
   canManage,
+  products = [],
+  consumableCounts = {},
 }: {
   services: ServiceRow[];
+  categories: ServiceCategory[];
   canManage: boolean;
+  products?: ProductOption[];
+  consumableCounts?: Record<string, number>;
 }) {
   return (
     <PaginatedList
@@ -66,29 +84,51 @@ export function ServicesTable({
                 <TableHead>Category</TableHead>
                 <TableHead>Price</TableHead>
                 <TableHead>Duration</TableHead>
+                <TableHead>Salon stock</TableHead>
                 <TableHead>Status</TableHead>
-                {canManage && <TableHead className="w-[80px]" />}
+                {canManage && <TableHead className="w-[280px]">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {slice.map((service) => (
-                <TableRow key={service.id}>
-                  <TableCell className="font-medium">{service.name}</TableCell>
-                  <TableCell>{service.category?.name ?? "—"}</TableCell>
-                  <TableCell>{formatCurrency(service.price)}</TableCell>
-                  <TableCell>{formatDuration(service.duration_minutes)}</TableCell>
-                  <TableCell>
-                    <Badge variant={service.is_active ? "default" : "secondary"}>
-                      {service.is_active ? "Active" : "Inactive"}
-                    </Badge>
-                  </TableCell>
-                  {canManage && (
+              {slice.map((service) => {
+                const linked = consumableCounts[service.id] ?? 0;
+                return (
+                  <TableRow key={service.id}>
+                    <TableCell className="font-medium">{service.name}</TableCell>
+                    <TableCell>{service.category?.name ?? "—"}</TableCell>
+                    <TableCell>{formatCurrency(service.price)}</TableCell>
+                    <TableCell>{formatDuration(service.duration_minutes)}</TableCell>
                     <TableCell>
-                      <DeleteServiceButton id={service.id} />
+                      {linked > 0 ? (
+                        <Badge variant="secondary">
+                          {linked} product{linked === 1 ? "" : "s"}
+                        </Badge>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">None</span>
+                      )}
                     </TableCell>
-                  )}
-                </TableRow>
-              ))}
+                    <TableCell>
+                      <Badge variant={service.is_active ? "default" : "secondary"}>
+                        {service.is_active ? "Active" : "Inactive"}
+                      </Badge>
+                    </TableCell>
+                    {canManage && (
+                      <TableCell>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <EditServiceButton service={service} categories={categories} />
+                          <ServiceConsumablesButton
+                            serviceId={service.id}
+                            serviceName={service.name}
+                            products={products}
+                            linkedCount={linked}
+                          />
+                          <DeleteServiceButton id={service.id} name={service.name} />
+                        </div>
+                      </TableCell>
+                    )}
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>

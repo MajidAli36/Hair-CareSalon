@@ -45,6 +45,23 @@ export function ProductForm({ categories }: { categories: ProductCategory[] }) {
         </select>
       </div>
       <div className="space-y-2 sm:col-span-2">
+        <Label htmlFor="usage_kind">Product type *</Label>
+        <select
+          id="usage_kind"
+          name="usage_kind"
+          defaultValue="RETAIL"
+          className="flex h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm"
+        >
+          <option value="RETAIL">Customer / retail (POS sale only)</option>
+          <option value="SALON">In-house / salon (used inside services only)</option>
+          <option value="BOTH">Both (sell on POS and use in services)</option>
+        </select>
+        <p className="text-xs text-muted-foreground">
+          Retail shows on POS. Salon shows under Services → Salon stock. Both means shared stock for
+          either use.
+        </p>
+      </div>
+      <div className="space-y-2 sm:col-span-2">
         <Label htmlFor="p_desc">Description</Label>
         <Textarea id="p_desc" name="description" rows={2} />
       </div>

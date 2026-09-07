@@ -147,6 +147,15 @@ export async function updateService(
   }
 
   const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("services")
+    .select("id")
+    .eq("id", id)
+    .eq("organization_id", org.organizationId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!existing) return { error: "Service not found" };
+
   const { error } = await supabase
     .from("services")
     .update({
@@ -158,7 +167,8 @@ export async function updateService(
       is_active: parsed.data.is_active,
     })
     .eq("id", id)
-    .eq("organization_id", org.organizationId);
+    .eq("organization_id", org.organizationId)
+    .is("deleted_at", null);
 
   if (error) return { error: error.message };
   revalidatePath("/services");
@@ -338,4 +348,132 @@ export async function getPackages() {
 
   if (error) throw new Error(error.message);
   return data;
+}
+
+export type ServiceConsumableRow = {
+  id: string;
+  service_id: string;
+  product_id: string;
+  quantity: number;
+  product: { id: string; name: string; stock_quantity: number; sku: string | null } | null;
+};
+
+export async function getServiceConsumables(
+  serviceId: string
+): Promise<ServiceConsumableRow[]> {
+  const org = await requireOrganization();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("service_consumables")
+    .select(
+      `
+      id, service_id, product_id, quantity,
+      product:products(id, name, stock_quantity, sku)
+    `
+    )
+    .eq("organization_id", org.organizationId)
+    .eq("service_id", serviceId)
+    .order("created_at", { ascending: true });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as unknown as ServiceConsumableRow[];
+}
+
+/** Map service_id → number of linked salon products (for admin table badge). */
+export async function getServiceConsumableCounts(): Promise<Record<string, number>> {
+  const org = await requireOrganization();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("service_consumables")
+    .select("service_id")
+    .eq("organization_id", org.organizationId);
+
+  if (error) throw new Error(error.message);
+  const counts: Record<string, number> = {};
+  for (const row of data ?? []) {
+    counts[row.service_id] = (counts[row.service_id] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/**
+ * Replace the full salon-stock recipe for a service.
+ * Empty list clears all links (service no longer consumes stock).
+ */
+export async function saveServiceConsumables(
+  serviceId: string,
+  items: { productId: string; quantity: number }[]
+): Promise<ActionResult> {
+  const org = await requireMinimumRole("MANAGER");
+  const supabase = await createClient();
+
+  const { data: service } = await supabase
+    .from("services")
+    .select("id, name")
+    .eq("id", serviceId)
+    .eq("organization_id", org.organizationId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!service) return { error: "Service not found" };
+
+  const cleaned: { productId: string; quantity: number }[] = [];
+  const seen = new Set<string>();
+  for (const item of items) {
+    const productId = item.productId?.trim();
+    const quantity = Math.floor(Number(item.quantity) || 0);
+    if (!productId || quantity <= 0) continue;
+    if (seen.has(productId)) {
+      return { error: "Each product can only be linked once per service" };
+    }
+    seen.add(productId);
+    cleaned.push({ productId, quantity });
+  }
+
+  if (cleaned.length) {
+    const productIds = cleaned.map((c) => c.productId);
+    const { data: products } = await supabase
+      .from("products")
+      .select("id, usage_kind")
+      .eq("organization_id", org.organizationId)
+      .is("deleted_at", null)
+      .in("id", productIds);
+    if ((products ?? []).length !== productIds.length) {
+      return { error: "One or more products were not found" };
+    }
+    const invalid = (products ?? []).find(
+      (p) => p.usage_kind === "RETAIL"
+    );
+    if (invalid) {
+      return {
+        error:
+          "Customer/retail products cannot be linked as salon stock. Edit the product type to In-house or Both.",
+      };
+    }
+  }
+
+  const { error: delErr } = await supabase
+    .from("service_consumables")
+    .delete()
+    .eq("service_id", serviceId)
+    .eq("organization_id", org.organizationId);
+  if (delErr) return { error: delErr.message };
+
+  if (cleaned.length) {
+    const { error: insErr } = await supabase.from("service_consumables").insert(
+      cleaned.map((c) => ({
+        organization_id: org.organizationId,
+        service_id: serviceId,
+        product_id: c.productId,
+        quantity: c.quantity,
+      }))
+    );
+    if (insErr) return { error: insErr.message };
+  }
+
+  revalidatePath("/services");
+  revalidatePath("/products");
+  revalidatePath("/pos");
+  return { success: true };
 }

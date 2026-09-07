@@ -17,6 +17,13 @@ export async function canManageRecords() {
   return hasMinimumRole(org.role, "MANAGER");
 }
 
+/** Soft-delete invoices — Admin and Owner only */
+export async function canAdminDeleteSales() {
+  const org = await getActiveOrganization();
+  if (!org) return false;
+  return hasMinimumRole(org.role, "ADMIN");
+}
+
 /** Create / update customer profiles (front desk + cashier) */
 export async function canManageCustomers() {
   const org = await getActiveOrganization();

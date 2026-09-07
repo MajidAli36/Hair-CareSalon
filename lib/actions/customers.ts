@@ -194,6 +194,7 @@ export type CustomerHistory = {
     amount_paid?: number;
     amount_due?: number;
     payment_status?: string;
+    deleted_at?: string | null;
     invoice: { invoice_number: string } | { invoice_number: string }[] | null;
     items: { name: string; quantity: number; line_total: number }[];
   }[];
@@ -227,7 +228,7 @@ export async function getCustomerHistory(customerId: string): Promise<CustomerHi
     supabase
       .from("sales")
       .select(`
-        id, total, status, completed_at, amount_paid, amount_due, payment_status,
+        id, total, status, completed_at, amount_paid, amount_due, payment_status, deleted_at,
         invoice:invoices(invoice_number),
         items:sale_items(name, quantity, line_total)
       `)
@@ -239,7 +240,9 @@ export async function getCustomerHistory(customerId: string): Promise<CustomerHi
   ]);
 
   const completedSales = sales.filter(
-    (s) => s.status === "COMPLETED" || s.status === "AMENDED"
+    (s) =>
+      (s.status === "COMPLETED" || s.status === "AMENDED") &&
+      !(s as { deleted_at?: string | null }).deleted_at
   );
   const totalSpent = completedSales.reduce((sum, s) => sum + Number(s.total), 0);
 

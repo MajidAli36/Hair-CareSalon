@@ -22,7 +22,16 @@ const productSchema = z.object({
   stock_quantity: z.coerce.number().int().min(0).default(0),
   low_stock_threshold: z.coerce.number().int().min(0).default(5),
   is_active: z.coerce.boolean().default(true),
+  usage_kind: z.enum(["RETAIL", "SALON", "BOTH"]).default("RETAIL"),
 });
+
+type ProductUsageKind = "RETAIL" | "SALON" | "BOTH";
+
+function parseProductUsageKind(value: FormDataEntryValue | null): ProductUsageKind {
+  const v = String(value ?? "RETAIL");
+  if (v === "SALON" || v === "BOTH" || v === "RETAIL") return v;
+  return "RETAIL";
+}
 
 export async function createProductCategory(
   _prev: ActionResult,
@@ -88,6 +97,7 @@ export async function createProduct(
     stock_quantity: formData.get("stock_quantity") ?? 0,
     low_stock_threshold: formData.get("low_stock_threshold") ?? 5,
     is_active: formData.get("is_active") === "on",
+    usage_kind: parseProductUsageKind(formData.get("usage_kind")),
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
 
@@ -103,9 +113,68 @@ export async function createProduct(
     stock_quantity: parsed.data.stock_quantity,
     low_stock_threshold: parsed.data.low_stock_threshold,
     is_active: parsed.data.is_active,
+    usage_kind: parsed.data.usage_kind,
   });
   if (error) return { error: error.message };
   revalidatePath("/products");
+  revalidatePath("/services");
+  revalidatePath("/pos");
+  return { success: true };
+}
+
+export async function updateProduct(
+  id: string,
+  _prev: ActionResult,
+  formData: FormData
+): Promise<ActionResult> {
+  const org = await requireMinimumRole("MANAGER");
+  const categoryId = formData.get("category_id") as string;
+  const parsed = productSchema
+    .omit({ stock_quantity: true })
+    .safeParse({
+      name: formData.get("name"),
+      sku: formData.get("sku") || undefined,
+      description: formData.get("description") || undefined,
+      category_id: categoryId && categoryId !== "none" ? categoryId : undefined,
+      cost_price: formData.get("cost_price"),
+      retail_price: formData.get("retail_price"),
+      low_stock_threshold: formData.get("low_stock_threshold") ?? 5,
+      is_active: formData.get("is_active") === "on",
+      usage_kind: parseProductUsageKind(formData.get("usage_kind")),
+    });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+
+  const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("products")
+    .select("id")
+    .eq("id", id)
+    .eq("organization_id", org.organizationId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!existing) return { error: "Product not found" };
+
+  const { error } = await supabase
+    .from("products")
+    .update({
+      category_id: parsed.data.category_id ?? null,
+      sku: parsed.data.sku ?? null,
+      name: parsed.data.name,
+      description: parsed.data.description ?? null,
+      cost_price: parsed.data.cost_price,
+      retail_price: parsed.data.retail_price,
+      low_stock_threshold: parsed.data.low_stock_threshold,
+      is_active: parsed.data.is_active,
+      usage_kind: parsed.data.usage_kind,
+    })
+    .eq("id", id)
+    .eq("organization_id", org.organizationId)
+    .is("deleted_at", null);
+
+  if (error) return { error: error.message };
+  revalidatePath("/products");
+  revalidatePath("/services");
+  revalidatePath("/pos");
   return { success: true };
 }
 
@@ -199,6 +268,30 @@ export async function getProducts() {
   return data as unknown as (Product & { category: { id: string; name: string } | null })[];
 }
 
+/** Lightweight list for linking salon stock to services (in-house / both only). */
+export async function getProductsForSalonLink(): Promise<
+  { id: string; name: string; stock_quantity: number; sku: string | null; usage_kind?: string }[]
+> {
+  const org = await requireOrganization();
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("products")
+    .select("id, name, stock_quantity, sku, usage_kind")
+    .eq("organization_id", org.organizationId)
+    .is("deleted_at", null)
+    .eq("is_active", true)
+    .in("usage_kind", ["SALON", "BOTH"])
+    .order("name");
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((p) => ({
+    id: p.id,
+    name: p.name,
+    stock_quantity: Number(p.stock_quantity) || 0,
+    sku: p.sku ?? null,
+    usage_kind: p.usage_kind,
+  }));
+}
+
 export async function getInventoryTransactions(limit = 20) {
   const org = await requireOrganization();
   const supabase = await createClient();
@@ -273,6 +366,7 @@ export async function getPosCatalog() {
       .eq("organization_id", org.organizationId)
       .eq("is_active", true)
       .is("deleted_at", null)
+      .in("usage_kind", ["RETAIL", "BOTH"])
       .order("name"),
     supabase
       .from("packages")

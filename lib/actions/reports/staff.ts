@@ -240,6 +240,7 @@ export async function getStaffReport(from?: string, to?: string): Promise<StaffR
       "Staff revenue splits equally when multiple stylists are selected on Served by.",
       "Legacy sales without multi-staff use the primary Served by or appointment stylist.",
       "Walk-in POS sales without Served by appear as Unassigned revenue.",
+      "Soft-deleted (admin delete) invoices are excluded from staff revenue.",
       "Commissions and salary costs are not modeled — see Finances for staff payments.",
     ],
   };
@@ -430,6 +431,7 @@ export async function getStaffMonthlyDetail(
         .eq("organization_id", org.organizationId)
         .in("id", chunk)
         .in("status", ["COMPLETED", "AMENDED"])
+        .is("deleted_at", null)
         .gte("completed_at", start.toISOString())
         .lte("completed_at", end.toISOString());
       multiSales = multiSales.concat(
@@ -477,6 +479,7 @@ export async function getStaffMonthlyDetail(
     .eq("organization_id", org.organizationId)
     .eq("staff_id", staffId)
     .in("status", ["COMPLETED", "AMENDED"])
+    .is("deleted_at", null)
     .gte("completed_at", start.toISOString())
     .lte("completed_at", end.toISOString());
 
@@ -516,6 +519,7 @@ export async function getStaffMonthlyDetail(
         .in("appointment_id", chunk)
         .is("staff_id", null)
         .in("status", ["COMPLETED", "AMENDED"])
+        .is("deleted_at", null)
         .gte("completed_at", start.toISOString())
         .lte("completed_at", end.toISOString());
 

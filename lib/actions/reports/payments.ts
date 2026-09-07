@@ -220,7 +220,7 @@ export async function getPaymentsReport(from?: string, to?: string): Promise<Pay
       reference: p.reference,
     })),
     notes: [
-      "Payment KPIs count cash/card/other tender only — deposit applications and VOID sale payments are excluded.",
+      "Payment KPIs count cash/card/other tender only — deposit applications, VOID, and soft-deleted sale payments are excluded.",
       "Ledger still lists all payment rows (including deposit apps) for audit.",
       "Deposit refunds are appointment advances refunded — not POS sale returns.",
       "Sale-level refunds (amend/void/refund) live on sale_refunds.",

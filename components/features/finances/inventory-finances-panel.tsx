@@ -120,8 +120,9 @@ export function InventoryFinancesPanel({ summary }: InventoryFinancesPanelProps)
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Product sold</TableHead>
-                  <TableHead className="text-right">Qty</TableHead>
+                  <TableHead>Product</TableHead>
+                  <TableHead className="text-right">Retail qty</TableHead>
+                  <TableHead className="text-right">Salon qty</TableHead>
                   <TableHead className="text-right">Revenue</TableHead>
                   <TableHead className="text-right">COGS</TableHead>
                   <TableHead className="text-right">Profit</TableHead>
@@ -137,6 +138,7 @@ export function InventoryFinancesPanel({ summary }: InventoryFinancesPanelProps)
                       )}
                     </TableCell>
                     <TableCell className="text-right">{row.qtySold}</TableCell>
+                    <TableCell className="text-right">{row.qtySalonUsed}</TableCell>
                     <TableCell className="text-right font-medium">
                       {formatCurrency(row.retailRevenue)}
                     </TableCell>
@@ -152,8 +154,9 @@ export function InventoryFinancesPanel({ summary }: InventoryFinancesPanelProps)
                   </TableRow>
                 ))}
                 <TableRow className="bg-muted/40 font-semibold">
-                  <TableCell>Total stock sold</TableCell>
+                  <TableCell>Total (retail + salon COGS)</TableCell>
                   <TableCell className="text-right">{summary.productUnitsSold}</TableCell>
+                  <TableCell className="text-right">—</TableCell>
                   <TableCell className="text-right">
                     {formatCurrency(summary.productRetailRevenue)}
                   </TableCell>

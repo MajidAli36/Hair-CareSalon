@@ -23,6 +23,7 @@ export default async function EditSalePage({ params }: PageProps) {
     getSaleRefunds(id).catch(() => []),
   ]);
   if (!sale) notFound();
+  if ((sale as { deleted_at?: string | null }).deleted_at) redirect(`/sales/${id}`);
   if (!isPostedSaleStatus(sale.status)) redirect(`/sales/${id}`);
 
   const items = (sale.items ?? []) as {

@@ -133,7 +133,7 @@ export async function getOverallReport(from?: string, to?: string): Promise<Over
       "Ticket revenue uses completed/amended sale totals (after discount, including tax).",
       "Net revenue = ticket revenue − partial sale refunds on those same tickets (full void/refund already removes the ticket).",
       "Service / product / package mix uses line totals (before sale-level discount allocation).",
-      "Gross profit is product COGS only — services and packages have no cost model.",
+      "Gross profit deducts product COGS (retail products sold + salon stock used inside services).",
       "Deposit refunds are appointment advances returned to customers.",
     ],
   };

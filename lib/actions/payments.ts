@@ -46,13 +46,14 @@ export async function receiveSalePayment(input: {
   const { data: sale, error: saleErr } = await supabase
     .from("sales")
     .select(
-      "id, status, total, customer_id, payment_version, amount_paid, amount_refunded, amount_due"
+      "id, status, total, customer_id, payment_version, amount_paid, amount_refunded, amount_due, deleted_at"
     )
     .eq("id", input.saleId)
     .eq("organization_id", org.organizationId)
     .single();
 
   if (saleErr || !sale) return { error: saleErr?.message ?? "Sale not found" };
+  if (sale.deleted_at) return { error: "Deleted invoices cannot receive payment" };
 
   const [{ data: pays }, { data: refs }] = await Promise.all([
     supabase

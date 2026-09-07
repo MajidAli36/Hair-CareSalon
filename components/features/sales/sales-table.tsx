@@ -18,6 +18,7 @@ import {
 import { SalesActionsMenu } from "@/components/features/sales/sales-actions-menu";
 import { ReceivePaymentDialog } from "@/components/features/sales/receive-payment-dialog";
 import { formatCurrency, formatCustomerName, formatDateTime } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 10;
 
@@ -31,6 +32,7 @@ type SaleRow = {
   payment_version?: number;
   completed_at: string | null;
   created_at: string;
+  deleted_at?: string | null;
   customer: { first_name: string; last_name: string | null } | null;
   invoice: { invoice_number: string }[] | { invoice_number: string } | null;
 };
@@ -46,11 +48,13 @@ export function SalesTable({
   sales,
   canManage = false,
   canReceivePayment = false,
+  canAdminDelete = false,
   emptyLabel,
 }: {
   sales: SaleRow[];
   canManage?: boolean;
   canReceivePayment?: boolean;
+  canAdminDelete?: boolean;
   emptyLabel?: string;
 }) {
   const { page, setPage, slice } = usePagination(sales, PAGE_SIZE);
@@ -90,12 +94,18 @@ export function SalesTable({
               const when = sale.completed_at ?? sale.created_at;
               const due = Number(sale.amount_due ?? 0);
               const paid = Number(sale.amount_paid ?? 0);
+              const isDeleted = Boolean(sale.deleted_at);
               const canPay =
+                !isDeleted &&
                 canReceivePayment &&
                 due > 0 &&
                 (sale.status === "COMPLETED" || sale.status === "AMENDED");
               return (
-                <TableRow key={sale.id} className="group">
+                <TableRow
+                  key={sale.id}
+                  className={cn("group", isDeleted && "bg-muted/40 opacity-60")}
+                  aria-disabled={isDeleted}
+                >
                   <TableCell className="font-medium">{invoiceNum ?? "—"}</TableCell>
                   <TableCell>
                     {sale.customer
@@ -105,12 +115,12 @@ export function SalesTable({
                   <TableCell className="text-right">{formatCurrency(sale.total)}</TableCell>
                   <TableCell className="text-right">{formatCurrency(paid)}</TableCell>
                   <TableCell className="text-right">
-                    {due > 0 ? (
+                    {due > 0 && !isDeleted ? (
                       <span className="font-medium text-amber-700 dark:text-amber-400">
                         {formatCurrency(due)}
                       </span>
                     ) : (
-                      formatCurrency(0)
+                      formatCurrency(due)
                     )}
                   </TableCell>
                   <TableCell>
@@ -119,19 +129,34 @@ export function SalesTable({
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge
-                      variant={
-                        sale.status === "COMPLETED" || sale.status === "AMENDED"
-                          ? "default"
-                          : "secondary"
-                      }
-                    >
-                      {sale.status}
-                    </Badge>
+                    <div className="flex flex-wrap gap-1">
+                      {isDeleted ? <Badge variant="outline">DELETED</Badge> : null}
+                      <Badge
+                        variant={
+                          sale.status === "COMPLETED" || sale.status === "AMENDED"
+                            ? "default"
+                            : "secondary"
+                        }
+                      >
+                        {sale.status}
+                      </Badge>
+                    </div>
                   </TableCell>
                   <TableCell>{formatDateTime(when)}</TableCell>
                   <TableCell>
-                    {canManage || canReceivePayment ? (
+                    {isDeleted ? (
+                      <div className="flex justify-end">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5"
+                          render={<Link href={`/sales/${sale.id}`} />}
+                        >
+                          <Eye className="size-3.5" />
+                          View
+                        </Button>
+                      </div>
+                    ) : canManage || canReceivePayment || canAdminDelete ? (
                       <SalesActionsMenu
                         saleId={sale.id}
                         status={sale.status}
@@ -141,6 +166,7 @@ export function SalesTable({
                         invoiceLabel={invoiceNum}
                         canManage={canManage}
                         canReceivePayment={canReceivePayment}
+                        canAdminDelete={canAdminDelete}
                         onReceivePayment={canPay ? () => setPaySale(sale) : undefined}
                       />
                     ) : (
@@ -189,11 +215,13 @@ export function SalesTableCard({
   sales,
   canManage = false,
   canReceivePayment = false,
+  canAdminDelete = false,
   emptyLabel,
 }: {
   sales: SaleRow[];
   canManage?: boolean;
   canReceivePayment?: boolean;
+  canAdminDelete?: boolean;
   emptyLabel?: string;
 }) {
   return (
@@ -206,6 +234,7 @@ export function SalesTableCard({
           sales={sales}
           canManage={canManage}
           canReceivePayment={canReceivePayment || canManage}
+          canAdminDelete={canAdminDelete}
           emptyLabel={emptyLabel}
         />
       </CardContent>

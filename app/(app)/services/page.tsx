@@ -1,8 +1,10 @@
 import {
   getPackages,
   getServiceCategories,
+  getServiceConsumableCounts,
   getServices,
 } from "@/lib/actions/services";
+import { getProductsForSalonLink } from "@/lib/actions/products";
 import { canManageRecords } from "@/lib/auth/permissions";
 import { CategoryForm } from "@/components/features/services/category-form";
 import { PackageForm } from "@/components/features/services/package-form";
@@ -22,12 +24,17 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default async function ServicesPage() {
-  const [categories, services, packages, canManage] = await Promise.all([
-    getServiceCategories(),
-    getServices(),
-    getPackages(),
-    canManageRecords(),
-  ]);
+  const [categories, services, packages, canManage, products, consumableCounts] =
+    await Promise.all([
+      getServiceCategories(),
+      getServices(),
+      getPackages(),
+      canManageRecords(),
+      getProductsForSalonLink().catch(() => []),
+      getServiceConsumableCounts().catch(() => ({}) as Record<string, number>),
+    ]);
+
+  const productOptions = products ?? [];
 
   return (
     <div className="space-y-6">
@@ -37,6 +44,29 @@ export default async function ServicesPage() {
           Manage service categories, individual services, and packages.
         </p>
       </div>
+
+      {canManage ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">How to link Salon stock</CardTitle>
+            <CardDescription className="space-y-2">
+              <span className="block">
+                1. Go to <span className="font-medium text-foreground">Products</span> → add an{" "}
+                <span className="font-medium text-foreground">In-house</span> product (or Both) and
+                Stock in.
+              </span>
+              <span className="block">
+                2. Back here → click <span className="font-medium text-foreground">Salon stock</span>{" "}
+                on a service → link those in-house products → Save.
+              </span>
+              <span className="block">
+                3. Customer/retail products stay on POS only. In-house products do not appear as POS
+                sell lines.
+              </span>
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      ) : null}
 
       <Tabs defaultValue="services">
         <TabsList>
@@ -61,9 +91,20 @@ export default async function ServicesPage() {
           <Card>
             <CardHeader>
               <CardTitle>All services</CardTitle>
+              <CardDescription>
+                After creating a service, open{" "}
+                <span className="font-medium text-foreground">Salon stock</span> to set which
+                products are consumed per ticket.
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <ServicesTable services={services} canManage={canManage} />
+              <ServicesTable
+                services={services}
+                categories={categories}
+                canManage={canManage}
+                products={productOptions}
+                consumableCounts={consumableCounts}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -96,7 +137,8 @@ export default async function ServicesPage() {
               <CardHeader>
                 <CardTitle>Create package</CardTitle>
                 <CardDescription>
-                  Bundle multiple services at a package price.
+                  Bundle multiple services at a package price. Salon stock recipes on each
+                  included service still apply when the package is sold.
                 </CardDescription>
               </CardHeader>
               <CardContent>

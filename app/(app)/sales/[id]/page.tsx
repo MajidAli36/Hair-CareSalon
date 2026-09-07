@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getSale } from "@/lib/actions/sales";
+import { getSale, getSaleConsumableUsages } from "@/lib/actions/sales";
 import { getSaleRefunds, getSaleVersions } from "@/lib/actions/sales-lifecycle";
 import { canManageRecords, canUsePos } from "@/lib/auth/permissions";
 import { isPostedSaleStatus } from "@/lib/sales/lifecycle";
@@ -29,10 +29,17 @@ export default async function SaleDetailPage({ params, searchParams }: SaleDetai
   ]);
   if (!sale) notFound();
 
-  const showHistory = tab === "history" && canManage;
-  const [versions, refunds] = showHistory
-    ? await Promise.all([getSaleVersions(id), getSaleRefunds(id)])
-    : [[], []];
+  const saleDeletedAt = (sale as { deleted_at?: string | null }).deleted_at ?? null;
+  const isDeleted = Boolean(saleDeletedAt);
+
+  const showHistory = tab === "history" && canManage && !isDeleted;
+  const [versions, refunds, consumableUsages] = showHistory
+    ? await Promise.all([getSaleVersions(id), getSaleRefunds(id), Promise.resolve([])])
+    : await Promise.all([
+        Promise.resolve([]),
+        Promise.resolve([]),
+        getSaleConsumableUsages(id).catch(() => []),
+      ]);
 
   const customer = sale.customer as {
     first_name: string; last_name: string | null; phone: string | null; email: string | null;
@@ -61,7 +68,10 @@ export default async function SaleDetailPage({ params, searchParams }: SaleDetai
   const amountDue = Number(saleAny.amount_due ?? 0);
   const amountPaid = Number(saleAny.amount_paid ?? 0);
   const canReceive =
-    (canPos || canManage) && isPostedSaleStatus(sale.status) && amountDue > 0;
+    !isDeleted &&
+    (canPos || canManage) &&
+    isPostedSaleStatus(sale.status) &&
+    amountDue > 0;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -75,6 +85,7 @@ export default async function SaleDetailPage({ params, searchParams }: SaleDetai
             {saleAny.current_version && saleAny.current_version > 1
               ? ` · Version ${saleAny.current_version}`
               : ""}
+            {isDeleted ? " · Deleted (view only)" : ""}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -86,12 +97,12 @@ export default async function SaleDetailPage({ params, searchParams }: SaleDetai
               invoiceLabel={invoiceData?.invoice_number}
             />
           ) : null}
-          {canManage && isPostedSaleStatus(sale.status) ? (
+          {canManage && !isDeleted && isPostedSaleStatus(sale.status) ? (
             <Button variant="outline" render={<Link href={`/sales/${id}/edit`} />}>
               Edit
             </Button>
           ) : null}
-          {canManage ? (
+          {canManage && !isDeleted ? (
             <Button
               variant={showHistory ? "default" : "outline"}
               render={<Link href={showHistory ? `/sales/${id}` : `/sales/${id}?tab=history`} />}
@@ -114,6 +125,7 @@ export default async function SaleDetailPage({ params, searchParams }: SaleDetai
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <CardTitle>Summary</CardTitle>
                 <div className="flex gap-2">
+                  {isDeleted ? <Badge variant="outline">DELETED</Badge> : null}
                   <Badge variant={isPostedSaleStatus(sale.status) ? "default" : "secondary"}>
                     {sale.status}
                   </Badge>
@@ -234,6 +246,41 @@ export default async function SaleDetailPage({ params, searchParams }: SaleDetai
             </CardContent>
           </Card>
 
+          {consumableUsages.length > 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Salon stock used</CardTitle>
+                <CardDescription>
+                  Internal products deducted for services on this invoice (not charged as retail
+                  lines).
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Product</TableHead>
+                      <TableHead>Qty</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {consumableUsages.map((u) => (
+                      <TableRow key={u.id}>
+                        <TableCell>
+                          {u.product?.name ?? u.product_id.slice(0, 8)}
+                          {u.product?.sku ? (
+                            <span className="text-muted-foreground"> · {u.product.sku}</span>
+                          ) : null}
+                        </TableCell>
+                        <TableCell>{u.quantity}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          ) : null}
+
           <Card>
             <CardHeader>
               <CardTitle>Payment history</CardTitle>
@@ -280,7 +327,7 @@ export default async function SaleDetailPage({ params, searchParams }: SaleDetai
                 invoiceLabel={invoiceData?.invoice_number}
               />
             ) : null}
-            {canManage && isPostedSaleStatus(sale.status) ? (
+            {canManage && !isDeleted && isPostedSaleStatus(sale.status) ? (
               <>
                 <Button variant="outline" render={<Link href={`/sales/${sale.id}/edit`} />}>
                   Edit / Amend

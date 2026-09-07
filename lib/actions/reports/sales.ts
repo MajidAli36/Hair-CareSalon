@@ -169,7 +169,7 @@ export async function getSalesReport(from?: string, to?: string): Promise<SalesR
     byPayment: Object.entries(payMap).map(([name, value]) => ({ name, value })),
     ledger,
     notes: [
-      "Posted revenue includes COMPLETED and AMENDED (current version only). VOID and REFUNDED are excluded.",
+      "Posted revenue includes COMPLETED and AMENDED (current version only). VOID, REFUNDED, and soft-deleted invoices are excluded.",
       "Gross sales = sum of subtotals; net sales = sum of ticket totals (after discount + tax).",
       "Payment mix excludes appointment deposit applications (already collected as advances).",
     ],

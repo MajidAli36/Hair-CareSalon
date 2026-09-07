@@ -15,7 +15,7 @@ export default async function WhatsAppPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">WhatsApp</h1>
         <p className="text-muted-foreground">
-          Select a customer and open WhatsApp with a pre-written message.
+          Choose a customer, pick a message template, edit if needed, then open WhatsApp.
         </p>
       </div>
 
@@ -23,8 +23,8 @@ export default async function WhatsAppPage() {
         <CardHeader>
           <CardTitle>Send to customer</CardTitle>
           <CardDescription>
-            Opens WhatsApp with a full thank-you message already written. Review it, then click Send
-            in WhatsApp.
+            Use thank-you, service offer, reply, feedback, reminder, or welcome templates. Edit the
+            text before sending, then click Send in WhatsApp.
           </CardDescription>
         </CardHeader>
         <CardContent>

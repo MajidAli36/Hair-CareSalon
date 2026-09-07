@@ -17,6 +17,7 @@ import { calculateInvoiceTotals, roundMoney } from "@/lib/sales/calculate";
 import type { CartItem, PaymentMethod } from "@/types/commerce";
 import { cn } from "@/lib/utils";
 import { X } from "lucide-react";
+import { CustomerSearchSelect } from "@/components/features/pos/customer-search-select";
 
 type CatalogService = { id: string; name: string; price: number; duration_minutes: number };
 type CatalogProduct = { id: string; name: string; retail_price: number; stock_quantity: number };
@@ -552,20 +553,12 @@ export function PosTerminal({
 
         <div className="space-y-2">
           <Label htmlFor="customer">Customer</Label>
-          <select
+          <CustomerSearchSelect
             id="customer"
+            customers={customers}
             value={customerId}
-            onChange={(e) => handleCustomerChange(e.target.value)}
-            className="flex h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm"
-          >
-            <option value="">Walk-in</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {formatCustomerName(c.first_name, c.last_name)}
-                {c.phone ? ` (${c.phone})` : ""}
-              </option>
-            ))}
-          </select>
+            onChange={handleCustomerChange}
+          />
           {selectedAppointment && (
             <p className="text-xs text-muted-foreground">
               Linked: {selectedAppointment.customerName} · {selectedAppointment.status}

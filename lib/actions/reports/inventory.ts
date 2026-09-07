@@ -150,7 +150,8 @@ export async function getInventoryReport(from?: string, to?: string): Promise<In
     transactions,
     notes: [
       "On-hand valuation uses current catalog cost/retail × stock quantity.",
-      "Dead stock = active products with on-hand qty and zero sales in the selected period.",
+      "Product COGS includes retail sales + salon (service) consumable use in the period.",
+      "Dead stock = active products with on-hand qty and zero retail sales in the selected period.",
       "Suppliers and purchase orders are not tracked in this system.",
     ],
   };

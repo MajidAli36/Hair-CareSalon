@@ -201,6 +201,9 @@ export async function previewSaleAmendment(payload: AmendPayload) {
     .single();
 
   if (!sale) return { error: "Sale not found" };
+  if ((sale as { deleted_at?: string | null }).deleted_at) {
+    return { error: "Deleted invoices cannot be amended" };
+  }
   if (!isPostedSaleStatus(sale.status)) {
     return { error: "Only completed invoices can be amended" };
   }
@@ -252,6 +255,9 @@ export async function amendCompletedSale(
     .single();
 
   if (saleErr || !sale) return { error: saleErr?.message ?? "Sale not found" };
+  if ((sale as { deleted_at?: string | null }).deleted_at) {
+    return { error: "Deleted invoices cannot be amended" };
+  }
   if (!isPostedSaleStatus(sale.status)) {
     return { error: "Only completed / amended invoices can be edited" };
   }
@@ -322,6 +328,63 @@ export async function amendCompletedSale(
   );
   let inventoryApplied = false;
 
+  const {
+    resolveServiceConsumableNeeds,
+    assertStockAvailable,
+    replaceSaleConsumableUsages,
+  } = await import("@/lib/inventory/service-consumables");
+
+  const newConsumableResolved = await resolveServiceConsumableNeeds(
+    org.organizationId,
+    totals.lines.map((l) => ({
+      itemType: l.itemType,
+      itemId: l.itemId,
+      quantity: l.quantity,
+    }))
+  );
+  if (newConsumableResolved.error) return { error: newConsumableResolved.error };
+
+  // Stock check for retail deltas (extra OUT) + full new consumable set after reverse
+  // Conservative: ensure current stock can cover retail delta OUT plus new consumables
+  // (old consumables will be restored first in replaceSaleConsumableUsages).
+  const retailExtraOut = new Map<string, number>();
+  for (const d of deltas) {
+    if (d.delta > 0) {
+      retailExtraOut.set(d.productId, (retailExtraOut.get(d.productId) ?? 0) + d.delta);
+    }
+  }
+  // After restore of old consumables, stock increases — check only retail extra + new consumables
+  // using assert against current stock is wrong for consumable swap. Simpler approach:
+  // check new consumables + retail extra against (current + old consumable snapshot).
+  const { data: oldUsages } = await supabase
+    .from("sale_consumable_usages")
+    .select("product_id, quantity")
+    .eq("sale_id", sale.id)
+    .eq("organization_id", org.organizationId);
+  const oldConsumableMap = new Map<string, number>();
+  for (const u of oldUsages ?? []) {
+    oldConsumableMap.set(
+      u.product_id,
+      (oldConsumableMap.get(u.product_id) ?? 0) + Math.floor(Number(u.quantity) || 0)
+    );
+  }
+
+  const projectedNeed = new Map<string, number>();
+  for (const [id, qty] of retailExtraOut) projectedNeed.set(id, qty);
+  for (const n of newConsumableResolved.needs) {
+    projectedNeed.set(n.productId, (projectedNeed.get(n.productId) ?? 0) + n.quantity);
+  }
+  // Credit old consumable restore against projected need
+  for (const [id, qty] of oldConsumableMap) {
+    const need = projectedNeed.get(id) ?? 0;
+    if (need <= qty) projectedNeed.delete(id);
+    else projectedNeed.set(id, need - qty);
+  }
+  if (projectedNeed.size) {
+    const stockCheck = await assertStockAvailable(org.organizationId, projectedNeed);
+    if (stockCheck.error) return { error: stockCheck.error };
+  }
+
   try {
     await ensureVersionOne(
       org.organizationId,
@@ -345,6 +408,14 @@ export async function amendCompletedSale(
 
     await applyInventoryDeltas(org.organizationId, sale.id, deltas, userId);
     inventoryApplied = true;
+
+    const consumableReplace = await replaceSaleConsumableUsages({
+      organizationId: org.organizationId,
+      saleId: sale.id,
+      newNeeds: newConsumableResolved.needs,
+      userId,
+    });
+    if (consumableReplace.error) throw new Error(consumableReplace.error);
 
     // Replace line items
     const { error: delErr } = await supabase
@@ -658,6 +729,9 @@ export async function refundSale(input: {
     .single();
 
   if (!sale) return { error: "Sale not found" };
+  if ((sale as { deleted_at?: string | null }).deleted_at) {
+    return { error: "Deleted invoices cannot be refunded" };
+  }
   if (!isPostedSaleStatus(sale.status) && sale.status !== "REFUNDED") {
     return { error: "Cannot refund this sale status" };
   }
@@ -700,6 +774,18 @@ export async function refundSale(input: {
         user?.id ?? null,
         "sale_refund_full"
       );
+      const { reverseSaleConsumableUsages } = await import(
+        "@/lib/inventory/service-consumables"
+      );
+      const consumableRestore = await reverseSaleConsumableUsages({
+        organizationId: org.organizationId,
+        saleId: sale.id,
+        userId: user?.id ?? null,
+        referenceType: "sale_refund_consumable",
+      });
+      if (consumableRestore.error) {
+        return { error: consumableRestore.error };
+      }
     } catch (e) {
       return { error: e instanceof Error ? e.message : "Inventory restore failed" };
     }

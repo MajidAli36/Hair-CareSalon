@@ -39,7 +39,11 @@ export function CustomerHistoryPanel({
   const [payOpen, setPayOpen] = useState(false);
 
   const sales = showDueOnly
-    ? history.sales.filter((s) => Number((s as { amount_due?: number }).amount_due ?? 0) > 0)
+    ? history.sales.filter(
+        (s) =>
+          !s.deleted_at &&
+          Number((s as { amount_due?: number }).amount_due ?? 0) > 0
+      )
     : history.sales;
 
   return (
@@ -179,9 +183,14 @@ export function CustomerHistoryPanel({
                     amount_paid?: number;
                     amount_due?: number;
                     payment_status?: string;
+                    deleted_at?: string | null;
                   };
+                  const isDeleted = Boolean(s.deleted_at);
                   return (
-                    <TableRow key={sale.id}>
+                    <TableRow
+                      key={sale.id}
+                      className={isDeleted ? "bg-muted/40 opacity-60" : undefined}
+                    >
                       <TableCell>
                         {sale.completed_at ? formatDate(sale.completed_at) : "—"}
                       </TableCell>
@@ -197,15 +206,18 @@ export function CustomerHistoryPanel({
                         {sale.items?.map((i) => i.name).join(", ") || "—"}
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          variant={
-                            sale.status === "COMPLETED" || sale.status === "AMENDED"
-                              ? "default"
-                              : "secondary"
-                          }
-                        >
-                          {sale.status}
-                        </Badge>
+                        <div className="flex flex-wrap gap-1">
+                          {isDeleted ? <Badge variant="outline">DELETED</Badge> : null}
+                          <Badge
+                            variant={
+                              sale.status === "COMPLETED" || sale.status === "AMENDED"
+                                ? "default"
+                                : "secondary"
+                            }
+                          >
+                            {sale.status}
+                          </Badge>
+                        </div>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">
@@ -219,12 +231,12 @@ export function CustomerHistoryPanel({
                         {formatCurrency(s.amount_paid ?? 0)}
                       </TableCell>
                       <TableCell className="text-right">
-                        {Number(s.amount_due ?? 0) > 0 ? (
+                        {Number(s.amount_due ?? 0) > 0 && !isDeleted ? (
                           <span className="font-medium text-amber-700 dark:text-amber-400">
                             {formatCurrency(s.amount_due ?? 0)}
                           </span>
                         ) : (
-                          formatCurrency(0)
+                          formatCurrency(Number(s.amount_due ?? 0))
                         )}
                       </TableCell>
                     </TableRow>

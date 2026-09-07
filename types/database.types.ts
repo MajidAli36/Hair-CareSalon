@@ -297,6 +297,66 @@ export type Database = {
           },
         ];
       };
+      service_consumables: {
+        Row: {
+          id: string;
+          organization_id: string;
+          service_id: string;
+          product_id: string;
+          quantity: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          service_id: string;
+          product_id: string;
+          quantity?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          service_id?: string;
+          product_id?: string;
+          quantity?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      sale_consumable_usages: {
+        Row: {
+          id: string;
+          organization_id: string;
+          sale_id: string;
+          product_id: string;
+          quantity: number;
+          unit_cost: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          sale_id: string;
+          product_id: string;
+          quantity: number;
+          unit_cost?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          sale_id?: string;
+          product_id?: string;
+          quantity?: number;
+          unit_cost?: number;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       packages: {
         Row: {
           id: string;
@@ -452,6 +512,7 @@ export type Database = {
           id: string; organization_id: string; category_id: string | null; sku: string | null;
           name: string; description: string | null; cost_price: number; retail_price: number;
           stock_quantity: number; low_stock_threshold: number; is_active: boolean;
+          usage_kind: "RETAIL" | "SALON" | "BOTH";
           deleted_at: string | null; deleted_by: string | null; deleted_by_role: MemberRole | null;
           created_by: string | null; updated_by: string | null;
           created_at: string; updated_at: string;
@@ -460,6 +521,7 @@ export type Database = {
           id?: string; organization_id: string; category_id?: string | null; sku?: string | null;
           name: string; description?: string | null; cost_price?: number; retail_price?: number;
           stock_quantity?: number; low_stock_threshold?: number; is_active?: boolean;
+          usage_kind?: "RETAIL" | "SALON" | "BOTH";
           deleted_at?: string | null; deleted_by?: string | null; deleted_by_role?: MemberRole | null;
           created_by?: string | null; updated_by?: string | null;
           created_at?: string; updated_at?: string;
@@ -468,6 +530,7 @@ export type Database = {
           id?: string; organization_id?: string; category_id?: string | null; sku?: string | null;
           name?: string; description?: string | null; cost_price?: number; retail_price?: number;
           stock_quantity?: number; low_stock_threshold?: number; is_active?: boolean;
+          usage_kind?: "RETAIL" | "SALON" | "BOTH";
           deleted_at?: string | null; deleted_by?: string | null; deleted_by_role?: MemberRole | null;
           created_by?: string | null; updated_by?: string | null;
           created_at?: string; updated_at?: string;
